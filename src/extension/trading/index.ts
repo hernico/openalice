@@ -57,3 +57,19 @@ export type {
   PriceChangeInput,
   SimulatePriceChangeResult,
 } from './git/index.js'
+
+// Guards
+export {
+  createGuardPipeline,
+  registerGuard,
+  resolveGuards,
+  MaxPositionSizeGuard,
+  MaxLeverageGuard,
+  CooldownGuard,
+  SymbolWhitelistGuard,
+} from './guards/index.js'
+export type {
+  GuardContext,
+  OperationGuard,
+  GuardRegistryEntry,
+} from './guards/index.js'
