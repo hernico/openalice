@@ -124,9 +124,9 @@ const openbbSchema = z.object({
   }).default({}),
   dataBackend: z.enum(['sdk', 'openbb']).default('sdk'),
   apiServer: z.object({
-    enabled: z.boolean().default(false),
+    enabled: z.boolean().default(true),
     port: z.number().int().min(1024).max(65535).default(6901),
-  }).default({ enabled: false, port: 6901 }),
+  }).default({ enabled: true, port: 6901 }),
 })
 
 const compactionSchema = z.object({

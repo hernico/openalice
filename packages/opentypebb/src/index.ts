@@ -39,6 +39,10 @@ export { OpenBBError, EmptyDataError, UnauthorizedError } from './core/provider/
 // App loader — convenience functions to create a fully-loaded system
 export { createRegistry, createExecutor, loadAllRouters } from './core/api/app-loader.js'
 
+// Widget builder — for OpenBB Workspace frontend integration
+export { buildWidgetsJson } from './core/api/widgets.js'
+export { mountWidgetsEndpoint } from './core/api/rest-api.js'
+
 // Pre-built providers (for direct import if needed)
 export { fmpProvider } from './providers/fmp/index.js'
 export { yfinanceProvider } from './providers/yfinance/index.js'

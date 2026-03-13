@@ -31,7 +31,7 @@ import { OpenBBEquityClient } from './openbb/equity/client.js'
 import { OpenBBCryptoClient } from './openbb/crypto/client.js'
 import { OpenBBCurrencyClient } from './openbb/currency/client.js'
 import { OpenBBNewsClient } from './openbb/news/client.js'
-import { startEmbeddedOpenBBServer } from './server/opentypebb.js'
+import { OpenBBServerPlugin } from './server/opentypebb.js'
 import { createMarketSearchTools } from './extension/market/index.js'
 import { createNewsTools } from './extension/news/index.js'
 import { createAnalysisTools } from './extension/analysis-kit/index.js'
@@ -248,9 +248,7 @@ async function main() {
     newsClient = new SDKNewsClient(executor, 'news', undefined, credentials, routeMap)
   }
 
-  if (config.openbb.apiServer.enabled) {
-    startEmbeddedOpenBBServer(config.openbb.apiServer.port)
-  }
+  // OpenBB API server is started later via optionalPlugins
 
   // ==================== Equity Symbol Index ====================
 
@@ -443,6 +441,10 @@ async function main() {
     }))
   }
 
+  if (config.openbb.apiServer.enabled) {
+    optionalPlugins.set('openbb-server', new OpenBBServerPlugin({ port: config.openbb.apiServer.port }))
+  }
+
   // ==================== Connector Reconnect ====================
 
   let connectorsReconnecting = false
@@ -482,6 +484,30 @@ async function main() {
         await p.start(ctx)
         optionalPlugins.set('telegram', p)
         changes.push('telegram started')
+      }
+
+      // --- OpenBB API Server ---
+      const openbbWanted = fresh.openbb.apiServer.enabled
+      const openbbRunning = optionalPlugins.has('openbb-server')
+      if (openbbRunning && !openbbWanted) {
+        await optionalPlugins.get('openbb-server')!.stop()
+        optionalPlugins.delete('openbb-server')
+        changes.push('openbb-server stopped')
+      } else if (!openbbRunning && openbbWanted) {
+        const p = new OpenBBServerPlugin({ port: fresh.openbb.apiServer.port })
+        await p.start(ctx)
+        optionalPlugins.set('openbb-server', p)
+        changes.push('openbb-server started')
+      } else if (openbbRunning && openbbWanted) {
+        const current = optionalPlugins.get('openbb-server') as OpenBBServerPlugin
+        if (current.port !== fresh.openbb.apiServer.port) {
+          await current.stop()
+          optionalPlugins.delete('openbb-server')
+          const p = new OpenBBServerPlugin({ port: fresh.openbb.apiServer.port })
+          await p.start(ctx)
+          optionalPlugins.set('openbb-server', p)
+          changes.push(`openbb-server restarted on port ${fresh.openbb.apiServer.port}`)
+        }
       }
 
       if (changes.length > 0) {
@@ -533,6 +559,8 @@ async function main() {
       'trading-ccxt',
     )
     console.log('ccxt: provider tools registered')
+  }).catch((err) => {
+    console.error('ccxt: background init failed:', err instanceof Error ? err.message : String(err))
   })
 
   // ==================== Shutdown ====================

@@ -105,6 +105,13 @@ export class CcxtAccount implements ITradingAccount {
   // ---- Lifecycle ----
 
   async init(): Promise<void> {
+    if (this.readOnly) {
+      console.log(
+        `CcxtAccount[${this.id}]: no API credentials — running in market-data-only mode. ` +
+        `Set apiKey and apiSecret in accounts.json for trading.`,
+      )
+    }
+
     // CCXT's fetchMarkets fires all market-type requests via Promise.all —
     // a single failure kills the entire batch. Monkey-patch fetchMarkets to
     // run each type sequentially with per-type retries.
@@ -144,7 +151,14 @@ export class CcxtAccount implements ITradingAccount {
     }
 
     // Now loadMarkets will use our sequential fetchMarkets
-    await this.exchange.loadMarkets()
+    try {
+      await this.exchange.loadMarkets()
+    } catch (err) {
+      throw new Error(
+        `Failed to connect to ${this.exchangeName} — check network connectivity. ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
 
     const marketCount = Object.keys(this.exchange.markets).length
     if (marketCount === 0) {

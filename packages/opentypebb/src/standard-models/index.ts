@@ -823,3 +823,12 @@ export {
   ChokepointVolumeDataSchema,
   type ChokepointVolumeData,
 } from './chokepoint-volume.js'
+
+// --- Equity Search ---
+
+export {
+  EquitySearchQueryParamsSchema,
+  type EquitySearchQueryParams,
+  EquitySearchDataSchema,
+  type EquitySearchData,
+} from './equity-search.js'

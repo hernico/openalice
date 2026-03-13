@@ -40,8 +40,8 @@ export function createConfigRoutes(opts?: ConfigRouteOpts) {
       }
       const body = await c.req.json()
       const validated = await writeConfigSection(section, body)
-      // Hot-reload connectors when their config changes
-      if (section === 'connectors') {
+      // Hot-reload connectors / OpenBB server when their config changes
+      if (section === 'connectors' || section === 'openbb') {
         await opts?.onConnectorsChange?.()
       }
       return c.json(validated)

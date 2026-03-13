@@ -36,7 +36,7 @@ interface CacheEnvelope {
 // ==================== Config ====================
 
 /** 免费 provider 列表 — 扩展时在这里加 */
-const SOURCES = ['sec', 'tmx'] as const
+const SOURCES = ['sec'] as const
 
 const CACHE_FILE = resolve('data/cache/equity/symbols.json')
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours

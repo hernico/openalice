@@ -52,9 +52,16 @@ export class AlpacaAccount implements ITradingAccount {
   // ---- Lifecycle ----
 
   private static readonly MAX_INIT_RETRIES = 5
+  private static readonly MAX_AUTH_RETRIES = 2
   private static readonly INIT_RETRY_BASE_MS = 1000
 
   async init(): Promise<void> {
+    if (!this.config.apiKey || !this.config.secretKey) {
+      throw new Error(
+        `No API credentials configured. Set apiKey and apiSecret in accounts.json to enable this account.`,
+      )
+    }
+
     this.client = new Alpaca({
       keyId: this.config.apiKey,
       secretKey: this.config.secretKey,
@@ -71,6 +78,13 @@ export class AlpacaAccount implements ITradingAccount {
         return
       } catch (err) {
         lastErr = err
+        const isAuthError = err instanceof Error &&
+          /40[13]|forbidden|unauthorized/i.test(err.message)
+        if (isAuthError && attempt >= AlpacaAccount.MAX_AUTH_RETRIES) {
+          throw new Error(
+            `Authentication failed — verify your Alpaca API key and secret are correct.`,
+          )
+        }
         if (attempt < AlpacaAccount.MAX_INIT_RETRIES) {
           const delay = AlpacaAccount.INIT_RETRY_BASE_MS * 2 ** (attempt - 1)
           console.warn(`AlpacaAccount[${this.id}]: init attempt ${attempt}/${AlpacaAccount.MAX_INIT_RETRIES} failed, retrying in ${delay}ms...`)
