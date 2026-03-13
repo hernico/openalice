@@ -1,7 +1,7 @@
 /**
  * Tool bridge — converts ToolCenter's Vercel AI SDK tools to an Agent SDK MCP server.
  *
- * Reuses the same pattern as `src/plugins/mcp.ts` (extract .shape, wrap execute),
+ * Reuses the same pattern as `src/server/mcp.ts` (extract .shape, wrap execute),
  * but targets `createSdkMcpServer()` instead of `@modelcontextprotocol/sdk McpServer`.
  */
 
