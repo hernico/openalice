@@ -181,18 +181,10 @@ describe('UTA — getState', () => {
     broker.setAccountInfo({ totalCashValue: 50_000, netLiquidation: 55_000, unrealizedPnL: 3_000, realizedPnL: 800 })
     broker.setPositions([makePosition()])
 
-    const filledState = new OrderState()
-    filledState.status = 'Filled'
-    const submittedState = new OrderState()
-    submittedState.status = 'Submitted'
-    const cancelledState = new OrderState()
-    cancelledState.status = 'Cancelled'
-
-    broker.setOrders([
-      makeOpenOrder({ orderState: filledState }),
-      makeOpenOrder({ orderState: submittedState }),
-      makeOpenOrder({ orderState: cancelledState }),
-    ])
+    // Push a limit order to create a pending entry in git history
+    uta.stagePlaceOrder({ aliceId: 'mock-AAPL', symbol: 'AAPL', side: 'buy', type: 'limit', qty: 5, price: 145 })
+    uta.commit('limit buy')
+    await uta.push()
 
     const state = await uta.getState()
 
@@ -201,7 +193,7 @@ describe('UTA — getState', () => {
     expect(state.unrealizedPnL).toBe(3_000)
     expect(state.realizedPnL).toBe(800)
     expect(state.positions).toHaveLength(1)
-    // Only Submitted/PreSubmitted orders are pending
+    // Limit order is pending (Submitted) — found via getOrders([pendingId])
     expect(state.pendingOrders).toHaveLength(1)
     expect(state.pendingOrders[0].orderState.status).toBe('Submitted')
   })

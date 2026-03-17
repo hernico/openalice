@@ -300,18 +300,13 @@ export class AlpacaBroker implements IBroker {
     }))
   }
 
-  async getOrders(): Promise<OpenOrder[]> {
-    const orders = await this.client.getOrders({
-      status: 'all',
-      limit: 100,
-      until: undefined,
-      after: undefined,
-      direction: undefined,
-      nested: undefined,
-      symbols: undefined,
-    }) as AlpacaOrderRaw[]
-
-    return orders.map(o => this.mapOpenOrder(o))
+  async getOrders(orderIds: string[]): Promise<OpenOrder[]> {
+    const results: OpenOrder[] = []
+    for (const id of orderIds) {
+      const order = await this.getOrder(id)
+      if (order) results.push(order)
+    }
+    return results
   }
 
   async getOrder(orderId: string): Promise<OpenOrder | null> {

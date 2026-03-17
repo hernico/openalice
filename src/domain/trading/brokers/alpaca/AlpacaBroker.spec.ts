@@ -540,86 +540,28 @@ describe('AlpacaBroker — getAccount()', () => {
 describe('AlpacaBroker — getOrders()', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('maps Alpaca orders to OpenOrder[] with correct statuses', async () => {
+  it('queries each orderId via getOrder', async () => {
     const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
-      getOrders: vi.fn().mockResolvedValue([
-        {
-          id: '100',
-          symbol: 'AAPL',
-          side: 'buy',
-          type: 'limit',
-          qty: '10',
-          limit_price: '150.00',
-          stop_price: null,
-          time_in_force: 'gtc',
-          status: 'filled',
-          filled_avg_price: '149.50',
-          filled_qty: '10',
-          filled_at: '2025-01-01T10:00:00Z',
-          created_at: '2025-01-01T09:30:00Z',
-          reject_reason: null,
-          extended_hours: false,
-          notional: null,
-        },
-        {
-          id: '101',
-          symbol: 'GOOG',
-          side: 'sell',
-          type: 'market',
-          qty: '5',
-          limit_price: null,
-          stop_price: null,
-          time_in_force: 'day',
-          status: 'new',
-          filled_avg_price: null,
-          filled_qty: '0',
-          filled_at: null,
-          created_at: '2025-01-01T09:35:00Z',
-          reject_reason: null,
-          extended_hours: false,
-          notional: null,
-        },
-        {
-          id: '102',
-          symbol: 'MSFT',
-          side: 'buy',
-          type: 'limit',
-          qty: '20',
-          limit_price: '400.00',
-          stop_price: null,
-          time_in_force: 'day',
-          status: 'canceled',
-          filled_avg_price: null,
-          filled_qty: '0',
-          filled_at: null,
-          created_at: '2025-01-01T09:40:00Z',
-          reject_reason: null,
-          extended_hours: false,
-          notional: null,
-        },
-      ]),
+      getOrder: vi.fn()
+        .mockResolvedValueOnce({
+          id: '100', symbol: 'AAPL', side: 'buy', type: 'limit', qty: '10',
+          limit_price: '150.00', stop_price: null, time_in_force: 'gtc',
+          status: 'filled', reject_reason: null, extended_hours: false, notional: null,
+        })
+        .mockResolvedValueOnce({
+          id: '101', symbol: 'GOOG', side: 'sell', type: 'market', qty: '5',
+          limit_price: null, stop_price: null, time_in_force: 'day',
+          status: 'new', reject_reason: null, extended_hours: false, notional: null,
+        }),
     }
 
-    const orders = await acc.getOrders()
-    expect(orders).toHaveLength(3)
-
-    // Filled order
+    const orders = await acc.getOrders(['100', '101'])
+    expect(orders).toHaveLength(2)
     expect(orders[0].contract.symbol).toBe('AAPL')
-    expect(orders[0].order.action).toBe('BUY')
-    expect(orders[0].order.totalQuantity.toNumber()).toBe(10)
-    expect(orders[0].order.orderType).toBe('LIMIT')
-    expect(orders[0].order.lmtPrice).toBe(150)
     expect(orders[0].orderState.status).toBe('Filled')
-
-    // New → Submitted
     expect(orders[1].contract.symbol).toBe('GOOG')
-    expect(orders[1].order.action).toBe('SELL')
     expect(orders[1].orderState.status).toBe('Submitted')
-
-    // Canceled → Cancelled
-    expect(orders[2].contract.symbol).toBe('MSFT')
-    expect(orders[2].orderState.status).toBe('Cancelled')
   })
 })
 

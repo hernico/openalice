@@ -59,7 +59,10 @@ export function createTradingRoutes(ctx: EngineContext) {
     const account = ctx.accountManager.get(c.req.param('id'))
     if (!account) return c.json({ error: 'Account not found' }, 404)
     try {
-      const orders = await account.getOrders()
+      // Default to pending orders if no ids specified
+      const idsParam = c.req.query('ids')
+      const orderIds = idsParam ? idsParam.split(',') : account.getPendingOrderIds().map(p => p.orderId)
+      const orders = await account.getOrders(orderIds)
       return c.json({ orders })
     } catch (err) {
       return c.json({ error: String(err) }, 500)

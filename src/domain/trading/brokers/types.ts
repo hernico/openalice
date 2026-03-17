@@ -142,7 +142,7 @@ export interface IBroker {
 
   getAccount(): Promise<AccountInfo>
   getPositions(): Promise<Position[]>
-  getOrders(): Promise<OpenOrder[]>
+  getOrders(orderIds: string[]): Promise<OpenOrder[]>
   getOrder(orderId: string): Promise<OpenOrder | null>
   getQuote(contract: Contract): Promise<Quote>
   getMarketClock(): Promise<MarketClock>

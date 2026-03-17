@@ -716,73 +716,43 @@ describe('CcxtBroker — getPositions', () => {
 // ==================== getOrders ====================
 
 describe('CcxtBroker — getOrders', () => {
-  it('merges fetchOpenOrders + fetchClosedOrders into OpenOrder[]', async () => {
+  it('queries each orderId via getOrder and returns results', async () => {
     const acc = makeAccount()
     const market = makeSwapMarket('BTC', 'USDT', 'BTC/USDT:USDT')
     setInitialized(acc, { 'BTC/USDT:USDT': market })
 
-    ;(acc as any).exchange.fetchOpenOrders = vi.fn().mockResolvedValue([
-      {
-        id: '1001', symbol: 'BTC/USDT:USDT', side: 'buy', type: 'limit',
-        amount: 0.1, price: 55000, status: 'open', average: undefined,
-        filled: 0, lastTradeTimestamp: undefined, timestamp: Date.now(), reduceOnly: false,
-      },
-    ])
-    ;(acc as any).exchange.fetchClosedOrders = vi.fn().mockResolvedValue([
-      {
-        id: '1002', symbol: 'BTC/USDT:USDT', side: 'sell', type: 'market',
-        amount: 0.2, price: undefined, status: 'closed', average: 61000,
-        filled: 0.2, lastTradeTimestamp: Date.now(), timestamp: Date.now(), reduceOnly: true,
-      },
-    ])
+    ;(acc as any).orderSymbolCache.set('ord-1', 'BTC/USDT:USDT')
+    ;(acc as any).orderSymbolCache.set('ord-2', 'BTC/USDT:USDT')
 
-    const orders = await acc.getOrders()
+    ;(acc as any).exchange.fetchOpenOrder = vi.fn()
+      .mockRejectedValueOnce(new Error('not open'))  // ord-1 not open
+      .mockResolvedValueOnce({ id: 'ord-2', symbol: 'BTC/USDT:USDT', side: 'buy', type: 'limit', amount: 0.1, price: 55000, status: 'open' })
+
+    ;(acc as any).exchange.fetchClosedOrder = vi.fn()
+      .mockResolvedValueOnce({ id: 'ord-1', symbol: 'BTC/USDT:USDT', side: 'sell', type: 'market', amount: 0.2, status: 'closed' })
+
+    const orders = await acc.getOrders(['ord-1', 'ord-2'])
     expect(orders).toHaveLength(2)
-
-    // Check first order (open)
-    expect(orders[0].order.action).toBe('BUY')
-    expect(orders[0].order.totalQuantity.toNumber()).toBe(0.1)
-    expect(orders[0].order.lmtPrice).toBe(55000)
-    expect(orders[0].orderState.status).toBe('Submitted')
-
-    // Check second order (closed)
-    expect(orders[1].order.action).toBe('SELL')
-    expect(orders[1].orderState.status).toBe('Filled')
+    expect(orders[0].order.action).toBe('SELL')
+    expect(orders[0].orderState.status).toBe('Filled')
+    expect(orders[1].order.action).toBe('BUY')
+    expect(orders[1].orderState.status).toBe('Submitted')
   })
 
-  it('caches orderId → symbol', async () => {
+  it('skips unfound orders', async () => {
     const acc = makeAccount()
-    const market = makeSwapMarket('ETH', 'USDT', 'ETH/USDT:USDT')
-    setInitialized(acc, { 'ETH/USDT:USDT': market })
+    setInitialized(acc, { 'BTC/USDT:USDT': makeSwapMarket('BTC', 'USDT', 'BTC/USDT:USDT') })
 
-    ;(acc as any).exchange.fetchOpenOrders = vi.fn().mockResolvedValue([
-      {
-        id: '2001', symbol: 'ETH/USDT:USDT', side: 'buy', type: 'limit',
-        amount: 1, price: 3000, status: 'open',
-      },
-    ])
-    ;(acc as any).exchange.fetchClosedOrders = vi.fn().mockResolvedValue([])
-
-    await acc.getOrders()
-    expect((acc as any).orderSymbolCache.get('2001')).toBe('ETH/USDT:USDT')
+    // ord-404 not in symbol cache
+    const orders = await acc.getOrders(['ord-404'])
+    expect(orders).toHaveLength(0)
   })
 
-  it('handles fetchOpenOrders failure gracefully', async () => {
+  it('returns empty for empty input', async () => {
     const acc = makeAccount()
-    const market = makeSwapMarket('BTC', 'USDT', 'BTC/USDT:USDT')
-    setInitialized(acc, { 'BTC/USDT:USDT': market })
-
-    ;(acc as any).exchange.fetchOpenOrders = vi.fn().mockRejectedValue(new Error('not supported'))
-    ;(acc as any).exchange.fetchClosedOrders = vi.fn().mockResolvedValue([
-      {
-        id: '3001', symbol: 'BTC/USDT:USDT', side: 'buy', type: 'market',
-        amount: 0.5, price: undefined, status: 'closed',
-      },
-    ])
-
-    const orders = await acc.getOrders()
-    expect(orders).toHaveLength(1)
-    expect(orders[0].order.action).toBe('BUY')
+    setInitialized(acc, {})
+    const orders = await acc.getOrders([])
+    expect(orders).toHaveLength(0)
   })
 })
 

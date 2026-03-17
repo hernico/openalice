@@ -119,13 +119,17 @@ This is a BROKER-LEVEL search — it queries your connected trading accounts.`,
     }),
 
     getOrders: tool({
-      description: 'Query order history (filled, pending, cancelled)',
-      inputSchema: z.object({ source: z.string().optional().describe(sourceDesc(false)) }),
-      execute: async ({ source }) => {
+      description: 'Query orders by ID. If no orderIds provided, queries all pending (submitted) orders.',
+      inputSchema: z.object({
+        source: z.string().optional().describe(sourceDesc(false)),
+        orderIds: z.array(z.string()).optional().describe('Order IDs to query. If omitted, queries all pending orders.'),
+      }),
+      execute: async ({ source, orderIds }) => {
         const targets = manager.resolve(source)
         if (targets.length === 0) return []
         const results = await Promise.all(targets.map(async (uta) => {
-          const orders = await uta.getOrders()
+          const ids = orderIds ?? uta.getPendingOrderIds().map(p => p.orderId)
+          const orders = await uta.getOrders(ids)
           return orders.map((o) => ({ source: uta.id, ...o }))
         }))
         return results.flat()

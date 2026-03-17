@@ -447,34 +447,16 @@ export class CcxtBroker implements IBroker {
     return result
   }
 
-  async getOrders(): Promise<OpenOrder[]> {
+  async getOrders(orderIds: string[]): Promise<OpenOrder[]> {
     this.ensureInit()
     this.ensureWritable()
 
-    const allOrders: CcxtOrder[] = []
-
-    try {
-      const open = await this.exchange.fetchOpenOrders()
-      allOrders.push(...open)
-    } catch {
-      // Some exchanges don't support fetchOpenOrders
+    const results: OpenOrder[] = []
+    for (const id of orderIds) {
+      const order = await this.getOrder(id)
+      if (order) results.push(order)
     }
-
-    try {
-      const closed = await this.exchange.fetchClosedOrders()
-      allOrders.push(...closed)
-    } catch {
-      // Some exchanges don't support fetchClosedOrders
-    }
-
-    const result: OpenOrder[] = []
-
-    for (const o of allOrders) {
-      const converted = this.convertCcxtOrder(o)
-      if (converted) result.push(converted)
-    }
-
-    return result
+    return results
   }
 
   async getOrder(orderId: string): Promise<OpenOrder | null> {

@@ -335,15 +335,14 @@ export class MockBroker implements IBroker {
     return result
   }
 
-  async getOrders(): Promise<OpenOrder[]> {
-    this._record('getOrders', [])
-    const result: OpenOrder[] = []
-    for (const internal of this._orders.values()) {
-      const orderState = new OrderState()
-      orderState.status = internal.status
-      result.push({ contract: internal.contract, order: internal.order, orderState })
+  async getOrders(orderIds: string[]): Promise<OpenOrder[]> {
+    this._record('getOrders', [orderIds])
+    const results: OpenOrder[] = []
+    for (const id of orderIds) {
+      const order = await this.getOrder(id)
+      if (order) results.push(order)
     }
-    return result
+    return results
   }
 
   async getOrder(orderId: string): Promise<OpenOrder | null> {

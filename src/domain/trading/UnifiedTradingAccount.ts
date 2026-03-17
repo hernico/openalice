@@ -118,10 +118,11 @@ export class UnifiedTradingAccount {
 
     // Wire internals
     this._getState = async (): Promise<GitState> => {
+      const pendingIds = this.git.getPendingOrderIds().map(p => p.orderId)
       const [accountInfo, positions, orders] = await Promise.all([
         broker.getAccount(),
         broker.getPositions(),
-        broker.getOrders(),
+        broker.getOrders(pendingIds),
       ])
       return {
         netLiquidation: accountInfo.netLiquidation,
@@ -297,8 +298,8 @@ export class UnifiedTradingAccount {
     return this.broker.getPositions()
   }
 
-  getOrders(): Promise<OpenOrder[]> {
-    return this.broker.getOrders()
+  getOrders(orderIds: string[]): Promise<OpenOrder[]> {
+    return this.broker.getOrders(orderIds)
   }
 
   getQuote(contract: Contract): Promise<Quote> {
