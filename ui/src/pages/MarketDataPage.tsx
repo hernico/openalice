@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api, type AppConfig } from '../api'
 import { SaveIndicator } from '../components/SaveIndicator'
-import { Section, Field, inputClass } from '../components/form'
+import { ConfigSection, Field, inputClass } from '../components/form'
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
 import { PageHeader } from '../components/PageHeader'
@@ -70,144 +70,6 @@ function TestButton({
   )
 }
 
-// ==================== Asset Providers ====================
-
-interface AssetProviderGridProps {
-  providers: Record<string, string>
-  providerKeys: Record<string, string>
-  onProviderChange: (asset: string, provider: string) => void
-  onKeyChange: (keyName: string, value: string) => void
-}
-
-function AssetProviderGrid({ providers, providerKeys, onProviderChange, onKeyChange }: AssetProviderGridProps) {
-  const [localKeys, setLocalKeys] = useState<Record<string, string>>(() => ({ ...providerKeys }))
-  const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
-
-  const handleKeyChange = (keyName: string, value: string) => {
-    setLocalKeys((prev) => ({ ...prev, [keyName]: value }))
-    setTestStatus((prev) => ({ ...prev, [keyName]: 'idle' }))
-    onKeyChange(keyName, value)
-  }
-
-  const testProvider = async (provider: string, keyName: string) => {
-    const key = localKeys[keyName]
-    if (!key) return
-    setTestStatus((prev) => ({ ...prev, [keyName]: 'testing' }))
-    try {
-      const result = await api.marketData.testProvider(provider, key)
-      setTestStatus((prev) => ({ ...prev, [keyName]: result.ok ? 'ok' : 'error' }))
-    } catch {
-      setTestStatus((prev) => ({ ...prev, [keyName]: 'error' }))
-    }
-  }
-
-  return (
-    <Section title="Asset Providers" description="Select a data provider for each asset class. Providers requiring an API key show a key input and test button.">
-      <div className="space-y-3">
-        {Object.entries(PROVIDER_OPTIONS).map(([asset, options]) => {
-          const selectedProvider = providers[asset] || options[0]
-          const keyName = PROVIDER_KEY_MAP[selectedProvider] ?? null
-          const status = keyName ? (testStatus[keyName] || 'idle') : 'idle'
-
-          return (
-            <div key={asset} className="flex items-center gap-3">
-              <span className="text-[13px] text-text w-20 shrink-0 font-medium">{ASSET_LABELS[asset]}</span>
-              <select
-                className={`${inputClass} max-w-[160px]`}
-                value={selectedProvider}
-                onChange={(e) => onProviderChange(asset, e.target.value)}
-              >
-                {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-              {keyName ? (
-                <>
-                  <input
-                    className={inputClass}
-                    type="password"
-                    value={localKeys[keyName] || ''}
-                    onChange={(e) => handleKeyChange(keyName, e.target.value)}
-                    placeholder="API key"
-                  />
-                  <TestButton
-                    status={status}
-                    disabled={!localKeys[keyName] || status === 'testing'}
-                    onClick={() => testProvider(selectedProvider, keyName)}
-                  />
-                </>
-              ) : (
-                <span className="text-[13px] text-text-muted/50 px-1">Free</span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </Section>
-  )
-}
-
-// ==================== Utility Providers ====================
-
-interface UtilityProvidersSectionProps {
-  providerKeys: Record<string, string>
-  onKeyChange: (keyName: string, value: string) => void
-}
-
-function UtilityProvidersSection({ providerKeys, onKeyChange }: UtilityProvidersSectionProps) {
-  const [localKeys, setLocalKeys] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {}
-    for (const p of UTILITY_PROVIDERS) init[p.key] = providerKeys[p.key] || ''
-    return init
-  })
-  const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
-
-  const handleKeyChange = (keyName: string, value: string) => {
-    setLocalKeys((prev) => ({ ...prev, [keyName]: value }))
-    setTestStatus((prev) => ({ ...prev, [keyName]: 'idle' }))
-    onKeyChange(keyName, value)
-  }
-
-  const testProvider = async (keyName: string) => {
-    const key = localKeys[keyName]
-    if (!key) return
-    setTestStatus((prev) => ({ ...prev, [keyName]: 'testing' }))
-    try {
-      const result = await api.marketData.testProvider(keyName, key)
-      setTestStatus((prev) => ({ ...prev, [keyName]: result.ok ? 'ok' : 'error' }))
-    } catch {
-      setTestStatus((prev) => ({ ...prev, [keyName]: 'error' }))
-    }
-  }
-
-  return (
-    <Section title="Macro & Utility Providers" description="Used by dedicated macro endpoints (FRED for CPI/GDP, BLS for employment, EIA for energy). Not per-asset-class selectable.">
-      <div className="space-y-4">
-        {UTILITY_PROVIDERS.map(({ key, name, desc, hint }) => {
-          const status = testStatus[key] || 'idle'
-          return (
-            <Field key={key} label={name} description={hint}>
-              <p className="text-[12px] text-text-muted/70 mb-2">{desc}</p>
-              <div className="flex items-center gap-2">
-                <input
-                  className={inputClass}
-                  type="password"
-                  value={localKeys[key]}
-                  onChange={(e) => handleKeyChange(key, e.target.value)}
-                  placeholder="Not configured"
-                />
-                <TestButton
-                  status={status}
-                  disabled={!localKeys[key] || status === 'testing'}
-                  onClick={() => testProvider(key)}
-                />
-              </div>
-            </Field>
-          )
-        })}
-      </div>
-    </Section>
-  )
-}
-
 // ==================== Page ====================
 
 export function MarketDataPage() {
@@ -262,8 +124,8 @@ export function MarketDataPage() {
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
-        <div className={`max-w-[640px] space-y-5 ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-5">
+        <div className={`max-w-[880px] mx-auto ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
           {/* Data Backend */}
           <DataBackendSection
             backend={dataBackend}
@@ -273,7 +135,7 @@ export function MarketDataPage() {
           />
 
           {/* Asset Providers */}
-          <AssetProviderGrid
+          <AssetProvidersSection
             providers={providers}
             providerKeys={providerKeys}
             onProviderChange={handleProviderChange}
@@ -281,7 +143,10 @@ export function MarketDataPage() {
           />
 
           {/* Embedded API Server */}
-          <Section title="Embedded API Server" description="Expose an OpenBB-compatible HTTP API from Alice. Other services can connect to query market data.">
+          <ConfigSection
+            title="Embedded API Server"
+            description="Expose an OpenBB-compatible HTTP API from Alice. Other services can connect to query market data."
+          >
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-[13px] text-text">Enable HTTP server</p>
@@ -307,7 +172,7 @@ export function MarketDataPage() {
                 />
               </Field>
             )}
-          </Section>
+          </ConfigSection>
 
           {/* Macro & Utility Providers */}
           <UtilityProvidersSection
@@ -315,7 +180,7 @@ export function MarketDataPage() {
             onKeyChange={handleKeyChange}
           />
         </div>
-        {loadError && <p className="text-[13px] text-red mt-4">Failed to load configuration.</p>}
+        {loadError && <p className="text-[13px] text-red mt-4 max-w-[880px] mx-auto">Failed to load configuration.</p>}
       </div>
     </div>
   )
@@ -351,7 +216,10 @@ function DataBackendSection({
   }
 
   return (
-    <Section title="Data Backend" description="Choose between the built-in TypeBB engine or an external OpenBB-compatible API.">
+    <ConfigSection
+      title="Data Backend"
+      description="Choose between the built-in TypeBB engine or an external OpenBB-compatible API."
+    >
       <div className="flex border border-border rounded-lg overflow-hidden w-fit mb-3">
         {(['typebb-sdk', 'openbb-api'] as const).map((opt, i) => (
           <button
@@ -402,6 +270,156 @@ function DataBackendSection({
           </Field>
         </div>
       )}
-    </Section>
+    </ConfigSection>
+  )
+}
+
+// ==================== Asset Providers Section ====================
+
+function AssetProvidersSection({
+  providers,
+  providerKeys,
+  onProviderChange,
+  onKeyChange,
+}: AssetProviderGridProps) {
+  const [localKeys, setLocalKeys] = useState<Record<string, string>>(() => ({ ...providerKeys }))
+  const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
+
+  const handleKeyChange = (keyName: string, value: string) => {
+    setLocalKeys((prev) => ({ ...prev, [keyName]: value }))
+    setTestStatus((prev) => ({ ...prev, [keyName]: 'idle' }))
+    onKeyChange(keyName, value)
+  }
+
+  const testProvider = async (provider: string, keyName: string) => {
+    const key = localKeys[keyName]
+    if (!key) return
+    setTestStatus((prev) => ({ ...prev, [keyName]: 'testing' }))
+    try {
+      const result = await api.marketData.testProvider(provider, key)
+      setTestStatus((prev) => ({ ...prev, [keyName]: result.ok ? 'ok' : 'error' }))
+    } catch {
+      setTestStatus((prev) => ({ ...prev, [keyName]: 'error' }))
+    }
+  }
+
+  return (
+    <ConfigSection
+      title="Asset Providers"
+      description="Select a data provider for each asset class. Providers requiring an API key show a key input and test button."
+    >
+      <div className="space-y-3">
+        {Object.entries(PROVIDER_OPTIONS).map(([asset, options]) => {
+          const selectedProvider = providers[asset] || options[0]
+          const keyName = PROVIDER_KEY_MAP[selectedProvider] ?? null
+          const status = keyName ? (testStatus[keyName] || 'idle') : 'idle'
+
+          return (
+            <div key={asset} className="flex items-center gap-3">
+              <span className="text-[13px] text-text w-20 shrink-0 font-medium">{ASSET_LABELS[asset]}</span>
+              <select
+                className={`${inputClass} max-w-[160px]`}
+                value={selectedProvider}
+                onChange={(e) => onProviderChange(asset, e.target.value)}
+              >
+                {options.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+              </select>
+              {keyName ? (
+                <>
+                  <input
+                    className={inputClass}
+                    type="password"
+                    value={localKeys[keyName] || ''}
+                    onChange={(e) => handleKeyChange(keyName, e.target.value)}
+                    placeholder="API key"
+                  />
+                  <TestButton
+                    status={status}
+                    disabled={!localKeys[keyName] || status === 'testing'}
+                    onClick={() => testProvider(selectedProvider, keyName)}
+                  />
+                </>
+              ) : (
+                <span className="text-[13px] text-text-muted/50 px-1">Free</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </ConfigSection>
+  )
+}
+
+interface AssetProviderGridProps {
+  providers: Record<string, string>
+  providerKeys: Record<string, string>
+  onProviderChange: (asset: string, provider: string) => void
+  onKeyChange: (keyName: string, value: string) => void
+}
+
+// ==================== Utility Providers Section ====================
+
+function UtilityProvidersSection({
+  providerKeys,
+  onKeyChange,
+}: {
+  providerKeys: Record<string, string>
+  onKeyChange: (keyName: string, value: string) => void
+}) {
+  const [localKeys, setLocalKeys] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {}
+    for (const p of UTILITY_PROVIDERS) init[p.key] = providerKeys[p.key] || ''
+    return init
+  })
+  const [testStatus, setTestStatus] = useState<Record<string, 'idle' | 'testing' | 'ok' | 'error'>>({})
+
+  const handleKeyChange = (keyName: string, value: string) => {
+    setLocalKeys((prev) => ({ ...prev, [keyName]: value }))
+    setTestStatus((prev) => ({ ...prev, [keyName]: 'idle' }))
+    onKeyChange(keyName, value)
+  }
+
+  const testProvider = async (keyName: string) => {
+    const key = localKeys[keyName]
+    if (!key) return
+    setTestStatus((prev) => ({ ...prev, [keyName]: 'testing' }))
+    try {
+      const result = await api.marketData.testProvider(keyName, key)
+      setTestStatus((prev) => ({ ...prev, [keyName]: result.ok ? 'ok' : 'error' }))
+    } catch {
+      setTestStatus((prev) => ({ ...prev, [keyName]: 'error' }))
+    }
+  }
+
+  return (
+    <ConfigSection
+      title="Macro & Utility Providers"
+      description="Used by dedicated macro endpoints — FRED for CPI/GDP, BLS for employment, EIA for energy. Not per-asset-class selectable."
+    >
+      <div className="space-y-4">
+        {UTILITY_PROVIDERS.map(({ key, name, desc, hint }) => {
+          const status = testStatus[key] || 'idle'
+          return (
+            <Field key={key} label={name} description={hint}>
+              <p className="text-[12px] text-text-muted/70 mb-2">{desc}</p>
+              <div className="flex items-center gap-2">
+                <input
+                  className={inputClass}
+                  type="password"
+                  value={localKeys[key]}
+                  onChange={(e) => handleKeyChange(key, e.target.value)}
+                  placeholder="Not configured"
+                />
+                <TestButton
+                  status={status}
+                  disabled={!localKeys[key] || status === 'testing'}
+                  onClick={() => testProvider(key)}
+                />
+              </div>
+            </Field>
+          )
+        })}
+      </div>
+    </ConfigSection>
   )
 }

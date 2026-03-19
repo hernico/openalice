@@ -1,10 +1,83 @@
 import { useState } from 'react'
 import { type AppConfig, type NewsCollectorConfig, type NewsCollectorFeed } from '../api'
 import { SaveIndicator } from '../components/SaveIndicator'
-import { Section, Field, inputClass } from '../components/form'
+import { ConfigSection, Field, inputClass } from '../components/form'
 import { Toggle } from '../components/Toggle'
 import { useConfigPage } from '../hooks/useConfigPage'
 import { PageHeader } from '../components/PageHeader'
+
+// ==================== Page ====================
+
+const DEFAULT_NEWS_CONFIG: NewsCollectorConfig = {
+  enabled: true,
+  intervalMinutes: 10,
+  maxInMemory: 2000,
+  retentionDays: 7,
+  feeds: [],
+}
+
+export function NewsPage() {
+  const { config, status, loadError, updateConfig, updateConfigImmediate, retry } = useConfigPage<NewsCollectorConfig>({
+    section: 'news',
+    extract: (full: AppConfig) => (full as Record<string, unknown>).news as NewsCollectorConfig,
+  })
+
+  const cfg = config ?? DEFAULT_NEWS_CONFIG
+  const enabled = cfg.enabled !== false
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
+      <PageHeader
+        title="News"
+        description="RSS feed collection and article archive."
+        right={
+          <div className="flex items-center gap-3">
+            <SaveIndicator status={status} onRetry={retry} />
+            <Toggle size="sm" checked={enabled} onChange={(v) => updateConfigImmediate({ enabled: v })} />
+          </div>
+        }
+      />
+
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-5">
+        <div className={`max-w-[880px] mx-auto ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+          {/* Collection Settings */}
+          <ConfigSection
+            title="Collection Settings"
+            description="Control how often articles are fetched and how long they are retained in the archive."
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Fetch interval (min)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={cfg.intervalMinutes}
+                  onChange={(e) => updateConfig({ intervalMinutes: Number(e.target.value) || 10 })}
+                />
+              </Field>
+              <Field label="Retention (days)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={1}
+                  value={cfg.retentionDays}
+                  onChange={(e) => updateConfig({ retentionDays: Number(e.target.value) || 7 })}
+                />
+              </Field>
+            </div>
+          </ConfigSection>
+
+          {/* RSS Feeds */}
+          <FeedsSection
+            feeds={cfg.feeds}
+            onChange={(feeds) => updateConfigImmediate({ feeds })}
+          />
+        </div>
+        {loadError && <p className="text-[13px] text-red mt-4 max-w-[880px] mx-auto">Failed to load configuration.</p>}
+      </div>
+    </div>
+  )
+}
 
 // ==================== Feeds Section ====================
 
@@ -30,9 +103,13 @@ function FeedsSection({
   }
 
   return (
-    <Section
+    <ConfigSection
       title="RSS Feeds"
-      description={feeds.length > 0 ? `${feeds.length} feed${feeds.length > 1 ? 's' : ''} configured. Articles are searchable via globNews / grepNews / readNews.` : 'No feeds configured. Add feeds below to start collecting articles.'}
+      description={
+        feeds.length > 0
+          ? `${feeds.length} feed${feeds.length > 1 ? 's' : ''} configured. Articles are searchable via globNews, grepNews, and readNews tools.`
+          : 'No feeds configured yet. Add feeds to start collecting articles.'
+      }
     >
       {/* Existing feeds */}
       {feeds.length > 0 && (
@@ -84,76 +161,6 @@ function FeedsSection({
           Add Feed
         </button>
       </div>
-    </Section>
-  )
-}
-
-// ==================== Page ====================
-
-const DEFAULT_NEWS_CONFIG: NewsCollectorConfig = {
-  enabled: true,
-  intervalMinutes: 10,
-  maxInMemory: 2000,
-  retentionDays: 7,
-  feeds: [],
-}
-
-export function NewsPage() {
-  const { config, status, loadError, updateConfig, updateConfigImmediate, retry } = useConfigPage<NewsCollectorConfig>({
-    section: 'news',
-    extract: (full: AppConfig) => (full as Record<string, unknown>).news as NewsCollectorConfig,
-  })
-
-  const cfg = config ?? DEFAULT_NEWS_CONFIG
-  const enabled = cfg.enabled !== false
-
-  return (
-    <div className="flex flex-col flex-1 min-h-0">
-      <PageHeader
-        title="News"
-        description="RSS feed collection and article archive."
-        right={
-          <div className="flex items-center gap-3">
-            <SaveIndicator status={status} onRetry={retry} />
-            <Toggle size="sm" checked={enabled} onChange={(v) => updateConfigImmediate({ enabled: v })} />
-          </div>
-        }
-      />
-
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5">
-        <div className={`max-w-[640px] space-y-5 ${!enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-          {/* Collection Settings */}
-          <Section title="Collection Settings" description="Control how often articles are fetched and how long they are retained.">
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Fetch interval (min)">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min={1}
-                  value={cfg.intervalMinutes}
-                  onChange={(e) => updateConfig({ intervalMinutes: Number(e.target.value) || 10 })}
-                />
-              </Field>
-              <Field label="Retention (days)">
-                <input
-                  className={inputClass}
-                  type="number"
-                  min={1}
-                  value={cfg.retentionDays}
-                  onChange={(e) => updateConfig({ retentionDays: Number(e.target.value) || 7 })}
-                />
-              </Field>
-            </div>
-          </Section>
-
-          {/* RSS Feeds */}
-          <FeedsSection
-            feeds={cfg.feeds}
-            onChange={(feeds) => updateConfigImmediate({ feeds })}
-          />
-        </div>
-        {loadError && <p className="text-[13px] text-red mt-4">Failed to load configuration.</p>}
-      </div>
-    </div>
+    </ConfigSection>
   )
 }

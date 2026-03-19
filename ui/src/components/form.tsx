@@ -45,6 +45,29 @@ export function Section({ id, title, description, children }: SectionProps) {
   )
 }
 
+// ==================== ConfigSection ====================
+
+/** Two-column settings layout: title + description on the left, controls on the right. */
+interface ConfigSectionProps {
+  title: string
+  description?: string
+  children: ReactNode
+}
+
+export function ConfigSection({ title, description, children }: ConfigSectionProps) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] gap-1 md:gap-10 py-6 border-b border-border/60 last:border-b-0">
+      <div className="mb-3 md:mb-0 md:pt-0.5">
+        <h3 className="text-[14px] font-semibold text-text">{title}</h3>
+        {description && (
+          <p className="text-[13px] text-text-muted/70 mt-1.5 leading-relaxed">{description}</p>
+        )}
+      </div>
+      <div>{children}</div>
+    </div>
+  )
+}
+
 // ==================== Field ====================
 
 interface FieldProps {
