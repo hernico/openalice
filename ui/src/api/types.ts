@@ -162,7 +162,6 @@ export interface BrokerHealthInfo {
 export interface AccountSummary {
   id: string
   label: string
-  platformId?: string
   capabilities: { supportedSecTypes: string[]; supportedOrderTypes: string[] }
   health: BrokerHealthInfo
 }
@@ -203,9 +202,6 @@ export interface Position {
   marketValue: number
   unrealizedPnL: number
   realizedPnL: number
-  leverage?: number
-  margin?: number
-  liquidationPrice?: number
 }
 
 export interface WalletCommitLog {
@@ -270,33 +266,43 @@ export interface ToolCallRecord {
 
 // ==================== Trading Config ====================
 
-export interface CcxtPlatformConfig {
+export interface CcxtAccountConfig {
   id: string
   label?: string
   type: 'ccxt'
   exchange: string
   sandbox: boolean
   demoTrading: boolean
-}
-
-export interface AlpacaPlatformConfig {
-  id: string
-  label?: string
-  type: 'alpaca'
-  paper: boolean
-}
-
-export type PlatformConfig = CcxtPlatformConfig | AlpacaPlatformConfig
-
-export interface AccountConfig {
-  id: string
-  platformId: string
-  label?: string
+  options?: Record<string, unknown>
   apiKey?: string
   apiSecret?: string
   password?: string
   guards: GuardEntry[]
 }
+
+export interface AlpacaAccountConfig {
+  id: string
+  label?: string
+  type: 'alpaca'
+  paper: boolean
+  apiKey?: string
+  apiSecret?: string
+  guards: GuardEntry[]
+}
+
+export interface IbkrAccountConfig {
+  id: string
+  label?: string
+  type: 'ibkr'
+  host: string
+  port: number
+  clientId: number
+  accountId?: string
+  paper: boolean
+  guards: GuardEntry[]
+}
+
+export type AccountConfig = CcxtAccountConfig | AlpacaAccountConfig | IbkrAccountConfig
 
 export interface GuardEntry {
   type: string

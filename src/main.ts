@@ -1,7 +1,7 @@
 import { readFile, writeFile, appendFile, mkdir } from 'fs/promises'
 import { resolve, dirname } from 'path'
 // Engine removed — AgentCenter is the top-level AI entry point
-import { loadConfig, loadTradingConfig } from './core/config.js'
+import { loadConfig, readAccountsConfig } from './core/config.js'
 import type { Plugin, EngineContext, ReconnectResult } from './core/types.js'
 import { McpPlugin } from './server/mcp.js'
 import { TelegramPlugin } from './connectors/telegram/index.js'
@@ -13,12 +13,11 @@ import {
   UnifiedTradingAccount,
   CcxtBroker,
   createCcxtProviderTools,
-  createPlatformFromConfig,
-  createBrokerFromConfig,
-  validatePlatformRefs,
+  createBroker,
 } from './domain/trading/index.js'
 import { createTradingTools } from './tool/trading.js'
-import type { GitExportState, IPlatform } from './domain/trading/index.js'
+import type { GitExportState } from './domain/trading/index.js'
+import type { AccountConfig } from './core/config.js'
 import { Brain } from './domain/brain/index.js'
 import { createBrainTools } from './tool/brain.js'
 import type { BrainExportState } from './domain/brain/index.js'
@@ -115,43 +114,28 @@ async function main() {
 
   const accountManager = new AccountManager()
 
-  // ==================== Platform-driven Account Init ====================
+  // ==================== Account Init ====================
 
-  const tradingConfig = await loadTradingConfig()
-  const platformRegistry = new Map<string, IPlatform>()
-  for (const pc of tradingConfig.platforms) {
-    platformRegistry.set(pc.id, createPlatformFromConfig(pc))
-  }
-  validatePlatformRefs([...platformRegistry.values()], tradingConfig.accounts)
+  const accountConfigs = await readAccountsConfig()
 
-  /** Create and register a UTA. Broker connection happens asynchronously inside UTA. */
-  async function initAccount(
-    accountCfg: { id: string; platformId: string; guards: Array<{ type: string; options: Record<string, unknown> }> },
-    platform: IPlatform,
-  ): Promise<UnifiedTradingAccount> {
-    const broker = createBrokerFromConfig(platform, accountCfg)
-    const savedState = await loadGitState(accountCfg.id)
-    const filePath = gitFilePath(accountCfg.id)
+  /** Create and register a UTA from account config. */
+  async function initAccount(accCfg: AccountConfig): Promise<UnifiedTradingAccount> {
+    const broker = createBroker(accCfg)
+    const savedState = await loadGitState(accCfg.id)
     const uta = new UnifiedTradingAccount(broker, {
-      guards: accountCfg.guards,
+      guards: accCfg.guards,
       savedState,
-      onCommit: createGitPersister(filePath),
+      onCommit: createGitPersister(gitFilePath(accCfg.id)),
       onHealthChange: (accountId, health) => {
         eventLog.append('account.health', { accountId, ...health })
       },
-      platformId: accountCfg.platformId,
     })
     accountManager.add(uta)
     return uta
   }
 
-  for (const accCfg of tradingConfig.accounts) {
-    if (!accCfg.apiKey) {
-      console.warn(`Account "${accCfg.id}": no API key configured — skipping. Add credentials in the Trading page or accounts.json.`)
-      continue
-    }
-    const platform = platformRegistry.get(accCfg.platformId)!
-    await initAccount(accCfg, platform)
+  for (const accCfg of accountConfigs) {
+    await initAccount(accCfg)
   }
 
   // ==================== Brain ====================
@@ -323,8 +307,8 @@ async function main() {
     }
     reconnectingAccounts.add(accountId)
     try {
-      // Re-read trading config to pick up credential/guard changes
-      const freshTrading = await loadTradingConfig()
+      // Re-read config to pick up credential/guard changes
+      const freshAccounts = await readAccountsConfig()
 
       // Close old account
       const currentUta = accountManager.get(accountId)
@@ -333,33 +317,18 @@ async function main() {
         accountManager.remove(accountId)
       }
 
-      // Find this account in fresh config
-      const accCfg = freshTrading.accounts.find((a) => a.id === accountId)
+      const accCfg = freshAccounts.find((a) => a.id === accountId)
       if (!accCfg) {
         return { success: true, message: `Account "${accountId}" not found in config (removed or disabled)` }
       }
 
-      // Build platform registry from fresh config
-      const freshPlatforms = new Map<string, IPlatform>()
-      for (const pc of freshTrading.platforms) {
-        freshPlatforms.set(pc.id, createPlatformFromConfig(pc))
-      }
-
-      const platform = freshPlatforms.get(accCfg.platformId)
-      if (!platform) {
-        return { success: false, error: `Platform "${accCfg.platformId}" not found for account "${accountId}"` }
-      }
-
-      const uta = await initAccount(accCfg, platform)
-      if (!uta) {
-        return { success: false, error: `Account "${accountId}" init failed` }
-      }
+      const uta = await initAccount(accCfg)
 
       // Wait for broker.init() + broker.getAccount() to verify the connection
       await uta.waitForConnect()
 
       // Re-register CCXT-specific tools if this is a CCXT account
-      if (platform.providerType !== 'alpaca') {
+      if (accCfg.type === 'ccxt') {
         toolCenter.register(
           createCcxtProviderTools(accountManager),
           'trading-ccxt',

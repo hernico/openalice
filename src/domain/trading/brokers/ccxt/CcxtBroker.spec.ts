@@ -164,21 +164,24 @@ describe('CcxtBroker — cancelOrder cache', () => {
     expect((acc as any).exchange.cancelOrder).toHaveBeenCalledWith('order-not-cached', undefined)
   })
 
-  it('returns false when exchange.cancelOrder throws (cache miss causes undefined symbol)', async () => {
+  it('returns PlaceOrderResult with error when exchange.cancelOrder throws', async () => {
     const acc = makeAccount()
     setInitialized(acc, {})
     ;(acc as any).exchange.cancelOrder = vi.fn().mockRejectedValue(new Error('symbol required'))
     const result = await acc.cancelOrder('order-not-cached')
-    expect(result).toBe(false)
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('symbol required')
   })
 
-  it('calls exchange.cancelOrder with correct symbol when orderId is cached', async () => {
+  it('returns PlaceOrderResult with Cancelled status when orderId is cached', async () => {
     const acc = makeAccount()
     setInitialized(acc, {})
     ;(acc as any).orderSymbolCache.set('order-123', 'BTC/USDT:USDT')
     ;(acc as any).exchange.cancelOrder = vi.fn().mockResolvedValue({})
     const result = await acc.cancelOrder('order-123')
-    expect(result).toBe(true)
+    expect(result.success).toBe(true)
+    expect(result.orderId).toBe('order-123')
+    expect(result.orderState?.status).toBe('Cancelled')
     expect((acc as any).exchange.cancelOrder).toHaveBeenCalledWith('order-123', 'BTC/USDT:USDT')
   })
 })
@@ -656,7 +659,6 @@ describe('CcxtBroker — getPositions', () => {
     expect(positions[0].side).toBe('long')
     expect(positions[0].avgCost).toBe(58000)
     expect(positions[0].marketPrice).toBe(60000)
-    expect(positions[0].leverage).toBe(5)
   })
 
   it('skips zero-size positions', async () => {

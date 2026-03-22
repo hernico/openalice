@@ -7,7 +7,7 @@
  * Run: pnpm test:e2e
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import Decimal from 'decimal.js'
 import { Order } from '@traderalice/ibkr'
 import { getTestAccounts, filterByProvider } from './setup.js'
@@ -28,30 +28,23 @@ beforeAll(async () => {
 }, 60_000)
 
 describe('CcxtBroker — Bybit e2e', () => {
-  it('has a configured Bybit account (or skips entire suite)', () => {
-    if (!broker) {
-      console.log('e2e: skipped — no Bybit account')
-      return
-    }
-    expect(broker).toBeDefined()
-  })
+  beforeEach(({ skip }) => { if (!broker) skip('no Bybit account') })
 
   it('fetches account info with positive equity', async () => {
-    if (!broker) return
     const account = await broker.getAccount()
     expect(account.netLiquidation).toBeGreaterThan(0)
     console.log(`  equity: $${account.netLiquidation.toFixed(2)}, cash: $${account.totalCashValue.toFixed(2)}`)
   })
 
   it('fetches positions', async () => {
-    if (!broker) return
+
     const positions = await broker.getPositions()
     expect(Array.isArray(positions)).toBe(true)
     console.log(`  ${positions.length} open positions`)
   })
 
   it('searches ETH contracts', async () => {
-    if (!broker) return
+
     const results = await broker.searchContracts('ETH')
     expect(results.length).toBeGreaterThan(0)
     const perp = results.find(r => r.contract.localSymbol?.includes('USDT:USDT'))
@@ -59,12 +52,10 @@ describe('CcxtBroker — Bybit e2e', () => {
     console.log(`  found ${results.length} ETH contracts, perp: ${perp!.contract.localSymbol}`)
   })
 
-  it('places market buy 0.01 ETH → execution returned', async () => {
-    if (!broker) return
-
-    const matches = await broker.searchContracts('ETH')
+  it('places market buy 0.01 ETH → execution returned', async ({ skip }) => {
+    const matches = await broker!.searchContracts('ETH')
     const ethPerp = matches.find(m => m.contract.localSymbol?.includes('USDT:USDT'))
-    if (!ethPerp) { console.log('  no ETH/USDT perp, skipping'); return }
+    if (!ethPerp) skip('ETH/USDT perp not found')
 
     // Diagnostic: see raw CCXT createOrder response
     const exchange = (broker as any).exchange
@@ -97,40 +88,36 @@ describe('CcxtBroker — Bybit e2e', () => {
   }, 30_000)
 
   it('verifies ETH position exists after buy', async () => {
-    if (!broker) return
+
     const positions = await broker.getPositions()
     const ethPos = positions.find(p => p.contract.symbol === 'ETH')
     expect(ethPos).toBeDefined()
     console.log(`  ETH position: ${ethPos!.quantity} ${ethPos!.side}`)
   })
 
-  it('closes ETH position with reduceOnly', async () => {
-    if (!broker) return
-
-    const matches = await broker.searchContracts('ETH')
+  it('closes ETH position with reduceOnly', async ({ skip }) => {
+    const matches = await broker!.searchContracts('ETH')
     const ethPerp = matches.find(m => m.contract.localSymbol?.includes('USDT:USDT'))
-    if (!ethPerp) return
+    if (!ethPerp) skip('ETH/USDT perp not found')
 
     const result = await broker.closePosition(ethPerp.contract, new Decimal('0.01'))
     expect(result.success).toBe(true)
     console.log(`  close orderId=${result.orderId}, success=${result.success}`)
   }, 15_000)
 
-  it('queries order by ID', async () => {
-    if (!broker) return
-
+  it('queries order by ID', async ({ skip }) => {
     // Place a small order to get an orderId
-    const matches = await broker.searchContracts('ETH')
+    const matches = await broker!.searchContracts('ETH')
     const ethPerp = matches.find(m => m.contract.localSymbol?.includes('USDT:USDT'))
-    if (!ethPerp) return
+    if (!ethPerp) skip('ETH/USDT perp not found')
 
     const order = new Order()
     order.action = 'BUY'
     order.orderType = 'MKT'
     order.totalQuantity = new Decimal('0.01')
 
-    const placed = await broker.placeOrder(ethPerp.contract, order)
-    if (!placed.orderId) return
+    const placed = await broker!.placeOrder(ethPerp!.contract, order)
+    if (!placed.orderId) skip('no orderId returned')
 
     // Wait for exchange to settle — Bybit needs time before order appears in closed list
     await new Promise(r => setTimeout(r, 5000))

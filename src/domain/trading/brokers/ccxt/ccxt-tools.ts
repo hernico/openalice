@@ -28,7 +28,7 @@ export function createCcxtProviderTools(manager: AccountManager) {
 
   return {
     getFundingRate: tool({
-      description: `Query the current funding rate for a perpetual contract.
+      description: `Query the current funding rate for a perpetual contract (CCXT/crypto accounts only).
 
 Returns:
 - fundingRate: current/latest funding rate (e.g. 0.0001 = 0.01%)
@@ -53,7 +53,7 @@ Use searchContracts first to get the aliceId.`,
     }),
 
     getOrderBook: tool({
-      description: `Query the order book (market depth) for a contract.
+      description: `Query the order book (market depth) for a contract (CCXT/crypto accounts only).
 
 Returns bids and asks sorted by price. Each level is [price, amount].
 Use this to evaluate liquidity and potential slippage before placing large orders.

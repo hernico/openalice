@@ -21,24 +21,16 @@ export type {
   OpenOrder,
   AccountInfo,
   Quote,
-  FundingRate,
-  OrderBookLevel,
-  OrderBook,
   MarketClock,
   AccountCapabilities,
 } from './brokers/index.js'
-export type { IPlatform, PlatformCredentials } from './brokers/index.js'
 export {
-  createPlatformFromConfig,
-  createBrokerFromConfig,
-  validatePlatformRefs,
+  createBroker,
   AlpacaBroker,
-  AlpacaPlatform,
   CcxtBroker,
-  CcxtPlatform,
   createCcxtProviderTools,
 } from './brokers/index.js'
-export type { AlpacaBrokerConfig, AlpacaPlatformConfig, CcxtBrokerConfig, CcxtPlatformConfig } from './brokers/index.js'
+export type { AlpacaBrokerConfig, CcxtBrokerConfig } from './brokers/index.js'
 
 // Trading-as-Git
 export { TradingGit } from './git/index.js'

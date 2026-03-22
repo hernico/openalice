@@ -1,5 +1,5 @@
 import { fetchJson } from './client'
-import type { TradingAccount, AccountSummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, PlatformConfig, AccountConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult } from './types'
+import type { TradingAccount, AccountSummary, AccountInfo, Position, WalletCommitLog, ReconnectResult, AccountConfig, WalletStatus, WalletPushResult, WalletRejectResult, TestConnectionResult } from './types'
 
 // ==================== Unified Trading API ====================
 
@@ -81,29 +81,8 @@ export const tradingApi = {
 
   // ==================== Trading Config CRUD ====================
 
-  async loadTradingConfig(): Promise<{ platforms: PlatformConfig[]; accounts: AccountConfig[] }> {
+  async loadTradingConfig(): Promise<{ accounts: AccountConfig[] }> {
     return fetchJson('/api/trading/config')
-  },
-
-  async upsertPlatform(platform: PlatformConfig): Promise<PlatformConfig> {
-    const res = await fetch(`/api/trading/config/platforms/${platform.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(platform),
-    })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(body.error || `Failed to save platform (${res.status})`)
-    }
-    return res.json()
-  },
-
-  async deletePlatform(id: string): Promise<void> {
-    const res = await fetch(`/api/trading/config/platforms/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}))
-      throw new Error(body.error || `Failed to delete platform (${res.status})`)
-    }
   },
 
   async upsertAccount(account: AccountConfig): Promise<AccountConfig> {
@@ -127,11 +106,11 @@ export const tradingApi = {
     }
   },
 
-  async testConnection(platform: PlatformConfig, credentials: { apiKey: string; apiSecret: string; password?: string }): Promise<TestConnectionResult> {
+  async testConnection(account: AccountConfig): Promise<TestConnectionResult> {
     const res = await fetch('/api/trading/config/test-connection', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform, credentials }),
+      body: JSON.stringify(account),
     })
     return res.json()
   },

@@ -20,12 +20,9 @@ import {
   type OpenOrder,
   type Quote,
   type MarketClock,
-  type FundingRate,
-  type OrderBook,
-  type OrderBookLevel,
 } from '../types.js'
 import '../../contract-ext.js'
-import type { CcxtBrokerConfig, CcxtMarket } from './ccxt-types.js'
+import type { CcxtBrokerConfig, CcxtMarket, FundingRate, OrderBook, OrderBookLevel } from './ccxt-types.js'
 import { MAX_INIT_RETRIES, INIT_RETRY_BASE_MS } from './ccxt-types.js'
 import {
   ccxtTypeToSecType,
@@ -68,7 +65,7 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     const exchanges = ccxt as unknown as Record<string, new (opts: Record<string, unknown>) => Exchange>
     const ExchangeClass = exchanges[config.exchange]
     if (!ExchangeClass) {
-      throw new Error(`Unknown CCXT exchange: ${config.exchange}`)
+      throw new BrokerError('CONFIG', `Unknown CCXT exchange: ${config.exchange}`)
     }
 
     // Default: skip option markets to reduce concurrent requests during loadMarkets
@@ -101,7 +98,7 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
 
   private ensureInit(): void {
     if (!this.initialized) {
-      throw new Error(`CcxtBroker[${this.id}] not initialized. Call init() first.`)
+      throw new BrokerError('CONFIG', `CcxtBroker[${this.id}] not initialized. Call init() first.`)
     }
   }
 
@@ -152,15 +149,12 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     try {
       await this.exchange.loadMarkets()
     } catch (err) {
-      throw new Error(
-        `Failed to connect to ${this.exchangeName} — check network connectivity. ` +
-        `${err instanceof Error ? err.message : String(err)}`,
-      )
+      throw BrokerError.from(err, 'NETWORK')
     }
 
     const marketCount = Object.keys(this.exchange.markets).length
     if (marketCount === 0) {
-      throw new Error(`CcxtBroker[${this.id}]: failed to load any markets`)
+      throw new BrokerError('NETWORK', `CcxtBroker[${this.id}]: failed to load any markets`)
     }
     this.initialized = true
     console.log(`CcxtBroker[${this.id}]: connected (${this.exchangeName}, ${marketCount} markets loaded)`)
@@ -296,22 +290,22 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     }
   }
 
-  async cancelOrder(orderId: string): Promise<boolean> {
+  async cancelOrder(orderId: string): Promise<PlaceOrderResult> {
     this.ensureInit()
-
 
     try {
       const ccxtSymbol = this.orderSymbolCache.get(orderId)
       await this.exchange.cancelOrder(orderId, ccxtSymbol)
-      return true
-    } catch {
-      return false
+      const orderState = new OrderState()
+      orderState.status = 'Cancelled'
+      return { success: true, orderId, orderState }
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   }
 
-  async modifyOrder(orderId: string, changes: Order): Promise<PlaceOrderResult> {
+  async modifyOrder(orderId: string, changes: Partial<Order>): Promise<PlaceOrderResult> {
     this.ensureInit()
-
 
     try {
       const ccxtSymbol = this.orderSymbolCache.get(orderId)
@@ -321,7 +315,7 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
 
       // editOrder requires type and side — fetch the original order to fill in defaults
       const original = await this.exchange.fetchOrder(orderId, ccxtSymbol)
-      const qty = !changes.totalQuantity.equals(UNSET_DECIMAL) ? parseFloat(changes.totalQuantity.toString()) : original.amount
+      const qty = changes.totalQuantity != null && !changes.totalQuantity.equals(UNSET_DECIMAL) ? parseFloat(changes.totalQuantity.toString()) : original.amount
       const price = changes.lmtPrice !== UNSET_DOUBLE ? changes.lmtPrice : original.price
 
       const result = await this.exchange.editOrder(
@@ -373,71 +367,74 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
   async getAccount(): Promise<AccountInfo> {
     this.ensureInit()
 
+    try {
+      const [balance, rawPositions] = await Promise.all([
+        this.exchange.fetchBalance(),
+        this.exchange.fetchPositions(),
+      ])
 
-    const [balance, rawPositions] = await Promise.all([
-      this.exchange.fetchBalance(),
-      this.exchange.fetchPositions(),
-    ])
+      const bal = balance as unknown as Record<string, Record<string, unknown>>
+      const total = parseFloat(String(bal['total']?.['USDT'] ?? bal['total']?.['USD'] ?? 0))
+      const free = parseFloat(String(bal['free']?.['USDT'] ?? bal['free']?.['USD'] ?? 0))
+      const used = parseFloat(String(bal['used']?.['USDT'] ?? bal['used']?.['USD'] ?? 0))
 
-    const bal = balance as unknown as Record<string, Record<string, unknown>>
-    const total = parseFloat(String(bal['total']?.['USDT'] ?? bal['total']?.['USD'] ?? 0))
-    const free = parseFloat(String(bal['free']?.['USDT'] ?? bal['free']?.['USD'] ?? 0))
-    const used = parseFloat(String(bal['used']?.['USDT'] ?? bal['used']?.['USD'] ?? 0))
+      let unrealizedPnL = 0
+      let realizedPnL = 0
+      for (const p of rawPositions) {
+        unrealizedPnL += parseFloat(String(p.unrealizedPnl ?? 0))
+        realizedPnL += parseFloat(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0))
+      }
 
-    let unrealizedPnL = 0
-    let realizedPnL = 0
-    for (const p of rawPositions) {
-      unrealizedPnL += parseFloat(String(p.unrealizedPnl ?? 0))
-      realizedPnL += parseFloat(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0))
-    }
-
-    return {
-      netLiquidation: total,
-      totalCashValue: free,
-      unrealizedPnL,
-      realizedPnL,
-      initMarginReq: used,
+      return {
+        netLiquidation: total,
+        totalCashValue: free,
+        unrealizedPnL,
+        realizedPnL,
+        initMarginReq: used,
+      }
+    } catch (err) {
+      throw BrokerError.from(err)
     }
   }
 
   async getPositions(): Promise<Position[]> {
     this.ensureInit()
 
+    try {
+      const raw = await this.exchange.fetchPositions()
+      const result: Position[] = []
 
-    const raw = await this.exchange.fetchPositions()
-    const result: Position[] = []
+      for (const p of raw) {
+        const market = this.markets[p.symbol]
+        if (!market) continue
 
-    for (const p of raw) {
-      const market = this.markets[p.symbol]
-      if (!market) continue
+        // Use Decimal arithmetic to avoid IEEE 754 precision loss (e.g. 0.51 → 0.50999...)
+        const contracts = new Decimal(String(p.contracts ?? 0)).abs()
+        const contractSize = new Decimal(String(p.contractSize ?? 1))
+        const quantity = contracts.mul(contractSize)
+        if (quantity.isZero()) continue
 
-      // Use Decimal arithmetic to avoid IEEE 754 precision loss (e.g. 0.51 → 0.50999...)
-      const contracts = new Decimal(String(p.contracts ?? 0)).abs()
-      const contractSize = new Decimal(String(p.contractSize ?? 1))
-      const quantity = contracts.mul(contractSize)
-      if (quantity.isZero()) continue
+        const markPrice = parseFloat(String(p.markPrice ?? 0))
+        const entryPrice = parseFloat(String(p.entryPrice ?? 0))
+        const marketValue = quantity.toNumber() * markPrice
+        const unrealizedPnL = parseFloat(String(p.unrealizedPnl ?? 0))
 
-      const markPrice = parseFloat(String(p.markPrice ?? 0))
-      const entryPrice = parseFloat(String(p.entryPrice ?? 0))
-      const marketValue = quantity.toNumber() * markPrice
-      const unrealizedPnL = parseFloat(String(p.unrealizedPnl ?? 0))
+        result.push({
+          contract: marketToContract(market, this.exchangeName),
+          side: p.side === 'long' ? 'long' : 'short',
+          quantity,
+          avgCost: entryPrice,
+          marketPrice: markPrice,
+          marketValue,
+          unrealizedPnL,
+          realizedPnL: parseFloat(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0)),
+        })
+      }
 
-      result.push({
-        contract: marketToContract(market, this.exchangeName),
-        side: p.side === 'long' ? 'long' : 'short',
-        quantity,
-        avgCost: entryPrice,
-        marketPrice: markPrice,
-        marketValue,
-        unrealizedPnL,
-        realizedPnL: parseFloat(String((p as unknown as Record<string, unknown>).realizedPnl ?? 0)),
-        leverage: parseFloat(String(p.leverage ?? 1)),
-        margin: parseFloat(String(p.initialMargin ?? p.collateral ?? 0)),
-        liquidationPrice: parseFloat(String(p.liquidationPrice ?? 0)) || undefined,
-      })
+      return result
+    } catch (err) {
+      throw BrokerError.from(err)
     }
-
-    return result
   }
 
   async getOrders(orderIds: string[]): Promise<OpenOrder[]> {
@@ -504,22 +501,26 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     this.ensureInit()
 
     const ccxtSymbol = contractToCcxt(contract, this.markets, this.exchangeName)
-    if (!ccxtSymbol) throw new Error('Cannot resolve contract to CCXT symbol')
+    if (!ccxtSymbol) throw new BrokerError('EXCHANGE', 'Cannot resolve contract to CCXT symbol')
 
-    const ticker = await this.exchange.fetchTicker(ccxtSymbol)
-    const market = this.markets[ccxtSymbol]
+    try {
+      const ticker = await this.exchange.fetchTicker(ccxtSymbol)
+      const market = this.markets[ccxtSymbol]
 
-    return {
-      contract: market
-        ? marketToContract(market, this.exchangeName)
-        : contract,
-      last: ticker.last ?? 0,
-      bid: ticker.bid ?? 0,
-      ask: ticker.ask ?? 0,
-      volume: ticker.baseVolume ?? 0,
-      high: ticker.high ?? undefined,
-      low: ticker.low ?? undefined,
-      timestamp: new Date(ticker.timestamp ?? Date.now()),
+      return {
+        contract: market
+          ? marketToContract(market, this.exchangeName)
+          : contract,
+        last: ticker.last ?? 0,
+        bid: ticker.bid ?? 0,
+        ask: ticker.ask ?? 0,
+        volume: ticker.baseVolume ?? 0,
+        high: ticker.high ?? undefined,
+        low: ticker.low ?? undefined,
+        timestamp: new Date(ticker.timestamp ?? Date.now()),
+      }
+    } catch (err) {
+      throw BrokerError.from(err)
     }
   }
 
@@ -545,19 +546,23 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     this.ensureInit()
 
     const ccxtSymbol = contractToCcxt(contract, this.markets, this.exchangeName)
-    if (!ccxtSymbol) throw new Error('Cannot resolve contract to CCXT symbol')
+    if (!ccxtSymbol) throw new BrokerError('EXCHANGE', 'Cannot resolve contract to CCXT symbol')
 
-    const funding = await this.exchange.fetchFundingRate(ccxtSymbol)
-    const market = this.markets[ccxtSymbol]
+    try {
+      const funding = await this.exchange.fetchFundingRate(ccxtSymbol)
+      const market = this.markets[ccxtSymbol]
 
-    return {
-      contract: market
-        ? marketToContract(market, this.exchangeName)
-        : contract,
-      fundingRate: funding.fundingRate ?? 0,
-      nextFundingTime: funding.fundingDatetime ? new Date(funding.fundingDatetime) : undefined,
-      previousFundingRate: funding.previousFundingRate ?? undefined,
-      timestamp: new Date(funding.timestamp ?? Date.now()),
+      return {
+        contract: market
+          ? marketToContract(market, this.exchangeName)
+          : contract,
+        fundingRate: funding.fundingRate ?? 0,
+        nextFundingTime: funding.fundingDatetime ? new Date(funding.fundingDatetime) : undefined,
+        previousFundingRate: funding.previousFundingRate ?? undefined,
+        timestamp: new Date(funding.timestamp ?? Date.now()),
+      }
+    } catch (err) {
+      throw BrokerError.from(err)
     }
   }
 
@@ -565,18 +570,22 @@ export class CcxtBroker implements IBroker<CcxtBrokerMeta> {
     this.ensureInit()
 
     const ccxtSymbol = contractToCcxt(contract, this.markets, this.exchangeName)
-    if (!ccxtSymbol) throw new Error('Cannot resolve contract to CCXT symbol')
+    if (!ccxtSymbol) throw new BrokerError('EXCHANGE', 'Cannot resolve contract to CCXT symbol')
 
-    const book = await this.exchange.fetchOrderBook(ccxtSymbol, limit)
-    const market = this.markets[ccxtSymbol]
+    try {
+      const book = await this.exchange.fetchOrderBook(ccxtSymbol, limit)
+      const market = this.markets[ccxtSymbol]
 
-    return {
-      contract: market
-        ? marketToContract(market, this.exchangeName)
-        : contract,
-      bids: book.bids.map(([p, a]) => [p ?? 0, a ?? 0] as OrderBookLevel),
-      asks: book.asks.map(([p, a]) => [p ?? 0, a ?? 0] as OrderBookLevel),
-      timestamp: new Date(book.timestamp ?? Date.now()),
+      return {
+        contract: market
+          ? marketToContract(market, this.exchangeName)
+          : contract,
+        bids: book.bids.map(([p, a]) => [p ?? 0, a ?? 0] as OrderBookLevel),
+        asks: book.asks.map(([p, a]) => [p ?? 0, a ?? 0] as OrderBookLevel),
+        timestamp: new Date(book.timestamp ?? Date.now()),
+      }
+    } catch (err) {
+      throw BrokerError.from(err)
     }
   }
 }

@@ -10,7 +10,21 @@ import { tool } from 'ai'
 import { z } from 'zod'
 import { Contract } from '@traderalice/ibkr'
 import type { AccountManager } from '@/domain/trading/account-manager.js'
+import { BrokerError } from '@/domain/trading/brokers/types.js'
 import '@/domain/trading/contract-ext.js'
+
+/** Classify a broker error into a structured response for AI consumption. */
+function handleBrokerError(err: unknown): { error: string; code: string; transient: boolean; hint: string } {
+  const be = err instanceof BrokerError ? err : BrokerError.from(err)
+  return {
+    error: be.message,
+    code: be.code,
+    transient: !be.permanent,
+    hint: be.permanent
+      ? 'This is a permanent error (configuration or credentials). Do not retry.'
+      : 'This may be a temporary issue. Wait a few seconds and try this tool again.',
+  }
+}
 
 const sourceDesc = (required: boolean, extra?: string) => {
   const base = `Account source — matches account id (e.g. "alpaca-paper") or provider (e.g. "alpaca", "ccxt").`
@@ -73,20 +87,26 @@ This is a BROKER-LEVEL search — it queries your connected trading accounts.`,
     }),
 
     getAccount: tool({
-      description: 'Query trading account info (netLiquidation, totalCashValue, buyingPower, unrealizedPnL, realizedPnL).',
+      description: `Query trading account info (netLiquidation, totalCashValue, buyingPower, unrealizedPnL, realizedPnL).
+If this tool returns an error with transient=true, wait a few seconds and retry once before reporting to the user.`,
       inputSchema: z.object({
         source: z.string().optional().describe(sourceDesc(false)),
       }),
       execute: async ({ source }) => {
         const targets = manager.resolve(source)
         if (targets.length === 0) return { error: 'No accounts available.' }
-        const results = await Promise.all(targets.map(async (uta) => ({ source: uta.id, ...await uta.getAccount() })))
-        return results.length === 1 ? results[0] : results
+        try {
+          const results = await Promise.all(targets.map(async (uta) => ({ source: uta.id, ...await uta.getAccount() })))
+          return results.length === 1 ? results[0] : results
+        } catch (err) {
+          return handleBrokerError(err)
+        }
       },
     }),
 
     getPortfolio: tool({
-      description: `Query current portfolio holdings. IMPORTANT: If result is an empty array [], you have no holdings.`,
+      description: `Query current portfolio holdings. IMPORTANT: If result is an empty array [], you have no holdings.
+If this tool returns an error with transient=true, wait a few seconds and retry once before reporting to the user.`,
       inputSchema: z.object({
         source: z.string().optional().describe(sourceDesc(false)),
         symbol: z.string().optional().describe('Filter by ticker, or omit for all'),
@@ -94,32 +114,36 @@ This is a BROKER-LEVEL search — it queries your connected trading accounts.`,
       execute: async ({ source, symbol }) => {
         const targets = manager.resolve(source)
         if (targets.length === 0) return { positions: [], message: 'No accounts available.' }
-        const allPositions: Array<Record<string, unknown>> = []
-        for (const uta of targets) {
-          const positions = await uta.getPositions()
-          const accountInfo = await uta.getAccount()
-          const totalMarketValue = positions.reduce((sum, p) => sum + p.marketValue, 0)
-          for (const pos of positions) {
-            if (symbol && symbol !== 'all' && pos.contract.symbol !== symbol) continue
-            const percentOfEquity = accountInfo.netLiquidation > 0 ? (pos.marketValue / accountInfo.netLiquidation) * 100 : 0
-            const percentOfPortfolio = totalMarketValue > 0 ? (pos.marketValue / totalMarketValue) * 100 : 0
-            allPositions.push({
-              source: uta.id, symbol: pos.contract.symbol, side: pos.side,
-              quantity: pos.quantity.toNumber(), avgCost: pos.avgCost, marketPrice: pos.marketPrice,
-              marketValue: pos.marketValue, unrealizedPnL: pos.unrealizedPnL, realizedPnL: pos.realizedPnL,
-              leverage: pos.leverage, margin: pos.margin, liquidationPrice: pos.liquidationPrice,
-              percentageOfEquity: `${percentOfEquity.toFixed(1)}%`,
-              percentageOfPortfolio: `${percentOfPortfolio.toFixed(1)}%`,
-            })
+        try {
+          const allPositions: Array<Record<string, unknown>> = []
+          for (const uta of targets) {
+            const positions = await uta.getPositions()
+            const accountInfo = await uta.getAccount()
+            const totalMarketValue = positions.reduce((sum, p) => sum + p.marketValue, 0)
+            for (const pos of positions) {
+              if (symbol && symbol !== 'all' && pos.contract.symbol !== symbol) continue
+              const percentOfEquity = accountInfo.netLiquidation > 0 ? (pos.marketValue / accountInfo.netLiquidation) * 100 : 0
+              const percentOfPortfolio = totalMarketValue > 0 ? (pos.marketValue / totalMarketValue) * 100 : 0
+              allPositions.push({
+                source: uta.id, symbol: pos.contract.symbol, side: pos.side,
+                quantity: pos.quantity.toNumber(), avgCost: pos.avgCost, marketPrice: pos.marketPrice,
+                marketValue: pos.marketValue, unrealizedPnL: pos.unrealizedPnL, realizedPnL: pos.realizedPnL,
+                percentageOfEquity: `${percentOfEquity.toFixed(1)}%`,
+                percentageOfPortfolio: `${percentOfPortfolio.toFixed(1)}%`,
+              })
+            }
           }
+          if (allPositions.length === 0) return { positions: [], message: 'No open positions.' }
+          return allPositions
+        } catch (err) {
+          return handleBrokerError(err)
         }
-        if (allPositions.length === 0) return { positions: [], message: 'No open positions.' }
-        return allPositions
       },
     }),
 
     getOrders: tool({
-      description: 'Query orders by ID. If no orderIds provided, queries all pending (submitted) orders.',
+      description: `Query orders by ID. If no orderIds provided, queries all pending (submitted) orders.
+If this tool returns an error with transient=true, wait a few seconds and retry once before reporting to the user.`,
       inputSchema: z.object({
         source: z.string().optional().describe(sourceDesc(false)),
         orderIds: z.array(z.string()).optional().describe('Order IDs to query. If omitted, queries all pending orders.'),
@@ -127,17 +151,22 @@ This is a BROKER-LEVEL search — it queries your connected trading accounts.`,
       execute: async ({ source, orderIds }) => {
         const targets = manager.resolve(source)
         if (targets.length === 0) return []
-        const results = await Promise.all(targets.map(async (uta) => {
-          const ids = orderIds ?? uta.getPendingOrderIds().map(p => p.orderId)
-          const orders = await uta.getOrders(ids)
-          return orders.map((o) => ({ source: uta.id, ...o }))
-        }))
-        return results.flat()
+        try {
+          const results = await Promise.all(targets.map(async (uta) => {
+            const ids = orderIds ?? uta.getPendingOrderIds().map(p => p.orderId)
+            const orders = await uta.getOrders(ids)
+            return orders.map((o) => ({ source: uta.id, ...o }))
+          }))
+          return results.flat()
+        } catch (err) {
+          return handleBrokerError(err)
+        }
       },
     }),
 
     getQuote: tool({
-      description: 'Query the latest quote/price for a contract.',
+      description: `Query the latest quote/price for a contract.
+If this tool returns an error with transient=true, wait a few seconds and retry once before reporting to the user.`,
       inputSchema: z.object({
         aliceId: z.string().describe('Contract identifier from searchContracts'),
         source: z.string().optional().describe(sourceDesc(false)),
@@ -157,13 +186,18 @@ This is a BROKER-LEVEL search — it queries your connected trading accounts.`,
     }),
 
     getMarketClock: tool({
-      description: 'Get current market clock status (isOpen, nextOpen, nextClose).',
+      description: `Get current market clock status (isOpen, nextOpen, nextClose).
+If this tool returns an error with transient=true, wait a few seconds and retry once before reporting to the user.`,
       inputSchema: z.object({ source: z.string().optional().describe(sourceDesc(false)) }),
       execute: async ({ source }) => {
         const targets = manager.resolve(source)
         if (targets.length === 0) return { error: 'No accounts available.' }
-        const results = await Promise.all(targets.map(async (uta) => ({ source: uta.id, ...await uta.getMarketClock() })))
-        return results.length === 1 ? results[0] : results
+        try {
+          const results = await Promise.all(targets.map(async (uta) => ({ source: uta.id, ...await uta.getMarketClock() })))
+          return results.length === 1 ? results[0] : results
+        } catch (err) {
+          return handleBrokerError(err)
+        }
       },
     }),
 

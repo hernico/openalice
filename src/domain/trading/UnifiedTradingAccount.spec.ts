@@ -92,9 +92,9 @@ describe('UTA — operation dispatch', () => {
       uta.git.commit('buy AAPL')
       const result = await uta.push()
 
-      // Push only returns submitted — never filled
       expect(result.submitted).toHaveLength(1)
       expect(result.submitted[0].orderId).toBeDefined()
+      expect(result.submitted[0].status).toBe('filled')
     })
 
     it('handles broker error', async () => {
@@ -141,13 +141,20 @@ describe('UTA — operation dispatch', () => {
   })
 
   describe('cancelOrder', () => {
-    it('calls broker.cancelOrder', async () => {
-      const spy = vi.spyOn(broker, 'cancelOrder')
+    it('calls broker.cancelOrder and records as cancelled', async () => {
+      const orderState = new OrderState()
+      orderState.status = 'Cancelled'
+      const spy = vi.spyOn(broker, 'cancelOrder').mockResolvedValue({
+        success: true, orderId: 'ord-789', orderState,
+      })
       uta.git.add({ action: 'cancelOrder', orderId: 'ord-789' })
       uta.git.commit('cancel order')
-      await uta.push()
+      const result = await uta.push()
 
       expect(spy).toHaveBeenCalledWith('ord-789', undefined)
+      expect(result.submitted).toHaveLength(1)
+      expect(result.submitted[0].status).toBe('cancelled')
+      expect(result.rejected).toHaveLength(0)
     })
   })
 

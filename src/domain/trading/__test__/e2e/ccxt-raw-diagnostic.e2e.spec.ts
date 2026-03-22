@@ -3,7 +3,7 @@
  * Purpose: understand what Bybit demoTrading actually returns.
  */
 
-import { describe, it, beforeAll } from 'vitest'
+import { describe, it, beforeAll, beforeEach } from 'vitest'
 import type { Exchange } from 'ccxt'
 import { getTestAccounts, filterByProvider } from './setup.js'
 
@@ -18,8 +18,9 @@ beforeAll(async () => {
 }, 60_000)
 
 describe('Raw CCXT Bybit diagnostic', () => {
+  beforeEach(({ skip }) => { if (!exchange) skip('no Bybit account') })
+
   it('createOrder → inspect full response', async () => {
-    if (!exchange) return
 
     const result = await exchange.createOrder('ETH/USDT:USDT', 'market', 'buy', 0.01)
     console.log('\n=== createOrder response ===')
@@ -47,7 +48,7 @@ describe('Raw CCXT Bybit diagnostic', () => {
   }, 15_000)
 
   it('fetchClosedOrders → inspect ids and format', async () => {
-    if (!exchange) return
+
 
     const closed = await exchange.fetchClosedOrders('ETH/USDT:USDT', undefined, 5)
     console.log(`\n=== fetchClosedOrders: ${closed.length} orders ===`)
@@ -67,7 +68,7 @@ describe('Raw CCXT Bybit diagnostic', () => {
   }, 15_000)
 
   it('fetchOpenOrders → inspect', async () => {
-    if (!exchange) return
+
 
     const open = await exchange.fetchOpenOrders('ETH/USDT:USDT')
     console.log(`\n=== fetchOpenOrders: ${open.length} orders ===`)
@@ -83,7 +84,7 @@ describe('Raw CCXT Bybit diagnostic', () => {
   }, 15_000)
 
   it('compare orderId format: spot vs perp', async () => {
-    if (!exchange) return
+
 
     const hasSpot = !!exchange.markets['ETH/USDT']
     const hasPerp = !!exchange.markets['ETH/USDT:USDT']
@@ -106,7 +107,7 @@ describe('Raw CCXT Bybit diagnostic', () => {
   }, 30_000)
 
   it('check market.id vs market.symbol for ETH perps', async () => {
-    if (!exchange) return
+
     const candidates = Object.values(exchange.markets).filter(
       m => m.base === 'ETH' && m.quote === 'USDT',
     )
@@ -117,7 +118,7 @@ describe('Raw CCXT Bybit diagnostic', () => {
   })
 
   it('fetchClosedOrders: no limit vs with since', async () => {
-    if (!exchange) return
+
 
     // 1. No limit — how many do we get?
     const noLimit = await exchange.fetchClosedOrders('ETH/USDT:USDT')

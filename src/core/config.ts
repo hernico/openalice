@@ -205,14 +205,14 @@ export const webSubchannelsSchema = z.array(webSubchannelSchema)
 
 export type WebChannel = z.infer<typeof webSubchannelSchema>
 
-// ==================== Platform + Account Config ====================
+// ==================== Account Config ====================
 
 const guardConfigSchema = z.object({
   type: z.string(),
   options: z.record(z.string(), z.unknown()).default({}),
 })
 
-const ccxtPlatformSchema = z.object({
+const ccxtAccountSchema = z.object({
   id: z.string(),
   label: z.string().optional(),
   type: z.literal('ccxt'),
@@ -220,35 +220,42 @@ const ccxtPlatformSchema = z.object({
   sandbox: z.boolean().default(false),
   demoTrading: z.boolean().default(false),
   options: z.record(z.string(), z.unknown()).optional(),
-}).passthrough()
-
-const alpacaPlatformSchema = z.object({
-  id: z.string(),
-  label: z.string().optional(),
-  type: z.literal('alpaca'),
-  paper: z.boolean().default(true),
-})
-
-export const platformConfigSchema = z.discriminatedUnion('type', [
-  ccxtPlatformSchema,
-  alpacaPlatformSchema,
-])
-
-export const platformsFileSchema = z.array(platformConfigSchema)
-
-export const accountConfigSchema = z.object({
-  id: z.string(),
-  platformId: z.string(),
-  label: z.string().optional(),
   apiKey: z.string().optional(),
   apiSecret: z.string().optional(),
   password: z.string().optional(),
   guards: z.array(guardConfigSchema).default([]),
+}).passthrough()
+
+const alpacaAccountSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  type: z.literal('alpaca'),
+  paper: z.boolean().default(true),
+  apiKey: z.string().optional(),
+  apiSecret: z.string().optional(),
+  guards: z.array(guardConfigSchema).default([]),
 })
+
+const ibkrAccountSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  type: z.literal('ibkr'),
+  host: z.string().default('127.0.0.1'),
+  port: z.number().int().default(7497),
+  clientId: z.number().int().default(0),
+  accountId: z.string().optional(),
+  paper: z.boolean().default(true),
+  guards: z.array(guardConfigSchema).default([]),
+})
+
+export const accountConfigSchema = z.discriminatedUnion('type', [
+  ccxtAccountSchema,
+  alpacaAccountSchema,
+  ibkrAccountSchema,
+])
 
 export const accountsFileSchema = z.array(accountConfigSchema)
 
-export type PlatformConfig = z.infer<typeof platformConfigSchema>
 export type AccountConfig = z.infer<typeof accountConfigSchema>
 
 // ==================== Unified Config Type ====================
@@ -365,52 +372,17 @@ export async function loadConfig(): Promise<Config> {
   }
 }
 
-// ==================== Trading Config Loader ====================
-
-/**
- * Load platform + account config from platforms.json + accounts.json.
- * Seeds empty arrays on first run — accounts are created via UI wizard.
- */
-export async function loadTradingConfig(): Promise<{
-  platforms: PlatformConfig[]
-  accounts: AccountConfig[]
-}> {
-  const [rawPlatforms, rawAccounts] = await Promise.all([
-    loadJsonFile('platforms.json'),
-    loadJsonFile('accounts.json'),
-  ])
-
-  const platforms = platformsFileSchema.parse(rawPlatforms ?? [])
-  const accounts = accountsFileSchema.parse(rawAccounts ?? [])
-
-  // Seed empty files on first run so user has something to edit
-  if (rawPlatforms === undefined || rawAccounts === undefined) {
-    await mkdir(CONFIG_DIR, { recursive: true })
-    const writes: Promise<void>[] = []
-    if (rawPlatforms === undefined) writes.push(writeFile(resolve(CONFIG_DIR, 'platforms.json'), JSON.stringify(platforms, null, 2) + '\n'))
-    if (rawAccounts === undefined) writes.push(writeFile(resolve(CONFIG_DIR, 'accounts.json'), JSON.stringify(accounts, null, 2) + '\n'))
-    await Promise.all(writes)
-  }
-
-  return { platforms, accounts }
-}
-
-// ==================== Platform / Account file helpers ====================
-
-export async function readPlatformsConfig(): Promise<PlatformConfig[]> {
-  const raw = await loadJsonFile('platforms.json')
-  return platformsFileSchema.parse(raw ?? [])
-}
-
-export async function writePlatformsConfig(platforms: PlatformConfig[]): Promise<void> {
-  const validated = platformsFileSchema.parse(platforms)
-  await mkdir(CONFIG_DIR, { recursive: true })
-  await writeFile(resolve(CONFIG_DIR, 'platforms.json'), JSON.stringify(validated, null, 2) + '\n')
-}
+// ==================== Account Config Loader ====================
 
 export async function readAccountsConfig(): Promise<AccountConfig[]> {
   const raw = await loadJsonFile('accounts.json')
-  return accountsFileSchema.parse(raw ?? [])
+  if (raw === undefined) {
+    // Seed empty file on first run
+    await mkdir(CONFIG_DIR, { recursive: true })
+    await writeFile(resolve(CONFIG_DIR, 'accounts.json'), '[]\n')
+    return []
+  }
+  return accountsFileSchema.parse(raw)
 }
 
 export async function writeAccountsConfig(accounts: AccountConfig[]): Promise<void> {

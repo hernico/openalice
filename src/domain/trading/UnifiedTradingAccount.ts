@@ -58,7 +58,6 @@ export interface UnifiedTradingAccountOptions {
   savedState?: GitExportState
   onCommit?: (state: GitExportState) => void | Promise<void>
   onHealthChange?: (accountId: string, health: BrokerHealthInfo) => void
-  platformId?: string
 }
 
 // ==================== Stage param types ====================
@@ -106,7 +105,6 @@ export class UnifiedTradingAccount {
   readonly label: string
   readonly broker: IBroker
   readonly git: TradingGit
-  readonly platformId?: string
 
   private readonly _getState: () => Promise<GitState>
   private readonly _onHealthChange?: (accountId: string, health: BrokerHealthInfo) => void
@@ -130,7 +128,6 @@ export class UnifiedTradingAccount {
     this.broker = broker
     this.id = broker.id
     this.label = broker.label
-    this.platformId = options.platformId
     this._onHealthChange = options.onHealthChange
 
     // Wire internals
@@ -161,7 +158,7 @@ export class UnifiedTradingAccount {
         case 'placeOrder':
           return broker.placeOrder(op.contract, op.order)
         case 'modifyOrder':
-          return broker.modifyOrder(op.orderId, op.changes as Parameters<IBroker['modifyOrder']>[1])
+          return broker.modifyOrder(op.orderId, op.changes)
         case 'closePosition':
           return broker.closePosition(op.contract, op.quantity)
         case 'cancelOrder':
@@ -254,15 +251,16 @@ export class UnifiedTradingAccount {
       throw new BrokerError('CONFIG', `Account "${this.label}" is disabled due to configuration error: ${this._lastError}`)
     }
     if (this.health === 'offline' && this._recovering) {
-      throw new Error(`Account "${this.label}" is offline and reconnecting. Try again shortly.`)
+      throw new BrokerError('NETWORK', `Account "${this.label}" is offline and reconnecting. Try again shortly.`)
     }
     try {
       const result = await fn()
       this._onSuccess()
       return result
     } catch (err) {
-      this._onFailure(err)
-      throw err
+      const brokerErr = BrokerError.from(err)
+      this._onFailure(brokerErr)
+      throw brokerErr
     }
   }
 
@@ -291,6 +289,13 @@ export class UnifiedTradingAccount {
       this._startRecovery()
     }
     if (prev !== this.health) this._emitHealthChange()
+  }
+
+  /** Nudge the recovery loop to retry immediately (e.g., when a data request finds this UTA offline). */
+  nudgeRecovery(): void {
+    if (!this._recovering || this._disabled) return
+    if (this._recoveryTimer) clearTimeout(this._recoveryTimer)
+    this._scheduleRecoveryAttempt(0)
   }
 
   private _startRecovery(): void {

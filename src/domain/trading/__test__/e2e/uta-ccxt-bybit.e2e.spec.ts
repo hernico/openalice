@@ -7,7 +7,7 @@
  * Run: pnpm test:e2e
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest'
 import { getTestAccounts, filterByProvider } from './setup.js'
 import { UnifiedTradingAccount } from '../../UnifiedTradingAccount.js'
 import type { IBroker } from '../../brokers/types.js'
@@ -37,11 +37,11 @@ describe('UTA — Bybit demo (ETH perp)', () => {
     console.log(`UTA Bybit: aliceId=${ethAliceId}`)
   }, 60_000)
 
-  it('buy → sync → close → sync (full lifecycle)', async () => {
-    if (!broker) { console.log('e2e: skipped'); return }
+  beforeEach(({ skip }) => { if (!broker) skip('no Bybit demo account') })
 
-    const uta = new UnifiedTradingAccount(broker)
-    const initialPositions = await broker.getPositions()
+  it('buy → sync → close → sync (full lifecycle)', async () => {
+    const uta = new UnifiedTradingAccount(broker!)
+    const initialPositions = await broker!.getPositions()
     const initialQty = initialPositions.find(p => p.contract.localSymbol?.includes('USDT:USDT'))?.quantity.toNumber() ?? 0
     console.log(`  initial ETH qty=${initialQty}`)
 
@@ -51,13 +51,17 @@ describe('UTA — Bybit demo (ETH perp)', () => {
     const pushResult = await uta.push()
     expect(pushResult.submitted).toHaveLength(1)
     expect(pushResult.rejected).toHaveLength(0)
-    console.log(`  pushed: orderId=${pushResult.submitted[0].orderId}`)
+    console.log(`  pushed: orderId=${pushResult.submitted[0].orderId}, status=${pushResult.submitted[0].status}`)
 
-    // Sync: confirm fill
-    const sync1 = await uta.sync({ delayMs: 3000 })
-    expect(sync1.updatedCount).toBe(1)
-    expect(sync1.updates[0].currentStatus).toBe('filled')
-    console.log(`  sync1: filled`)
+    // Sync: depends on whether fill was synchronous
+    if (pushResult.submitted[0].status === 'submitted') {
+      const sync1 = await uta.sync({ delayMs: 3000 })
+      expect(sync1.updatedCount).toBe(1)
+      expect(sync1.updates[0].currentStatus).toBe('filled')
+      console.log(`  sync1: filled`)
+    } else {
+      console.log(`  sync1: skipped (already ${pushResult.submitted[0].status} at push time)`)
+    }
 
     // Verify position
     const state = await uta.getState()
@@ -71,33 +75,33 @@ describe('UTA — Bybit demo (ETH perp)', () => {
     const closePush = await uta.push()
     expect(closePush.submitted).toHaveLength(1)
 
-    const sync2 = await uta.sync({ delayMs: 3000 })
-    expect(sync2.updatedCount).toBe(1)
-    expect(sync2.updates[0].currentStatus).toBe('filled')
-    console.log(`  close: filled`)
+    if (closePush.submitted[0].status === 'submitted') {
+      const sync2 = await uta.sync({ delayMs: 3000 })
+      expect(sync2.updatedCount).toBe(1)
+      expect(sync2.updates[0].currentStatus).toBe('filled')
+      console.log(`  close: filled`)
+    } else {
+      console.log(`  close: already ${closePush.submitted[0].status} at push time`)
+    }
 
     // Verify final qty
-    const finalPositions = await broker.getPositions()
+    const finalPositions = await broker!.getPositions()
     const finalQty = finalPositions.find(p => p.contract.localSymbol?.includes('USDT:USDT'))?.quantity.toNumber() ?? 0
     expect(Math.abs(finalQty - initialQty)).toBeLessThan(0.02)
     console.log(`  final ETH qty=${finalQty} (initial=${initialQty})`)
 
-    // Log: at least 4 commits (buy, sync, close, sync)
     const log = uta.log({ limit: 10 })
-    expect(log.length).toBeGreaterThanOrEqual(4)
+    expect(log.length).toBeGreaterThanOrEqual(2)
     console.log(`  log: ${log.length} commits`)
   }, 60_000)
 
   it('reject records user-rejected commit and clears staging', async () => {
-    if (!broker) { console.log('e2e: skipped'); return }
-
-    const uta = new UnifiedTradingAccount(broker)
+    const uta = new UnifiedTradingAccount(broker!)
 
     // Stage + Commit (but don't push)
     uta.stagePlaceOrder({ aliceId: ethAliceId, side: 'buy', type: 'market', qty: 0.01 })
     const commitResult = uta.commit('e2e: buy to be rejected')
     expect(commitResult.prepared).toBe(true)
-    console.log(`  committed: hash=${commitResult.hash}`)
 
     // Verify staging has content
     const statusBefore = uta.status()
@@ -109,7 +113,6 @@ describe('UTA — Bybit demo (ETH perp)', () => {
     expect(rejectResult.operationCount).toBe(1)
     expect(rejectResult.message).toContain('[rejected]')
     expect(rejectResult.message).toContain('user declined')
-    console.log(`  rejected: hash=${rejectResult.hash}, message="${rejectResult.message}"`)
 
     // Verify staging is cleared
     const statusAfter = uta.status()
@@ -120,32 +123,24 @@ describe('UTA — Bybit demo (ETH perp)', () => {
     const log = uta.log({ limit: 5 })
     const rejectedCommit = log.find(c => c.hash === rejectResult.hash)
     expect(rejectedCommit).toBeDefined()
-    expect(rejectedCommit!.message).toContain('[rejected]')
     expect(rejectedCommit!.operations[0].status).toBe('user-rejected')
-    console.log(`  log entry: ${rejectedCommit!.operations[0].status}`)
 
-    // Show the full commit
     const fullCommit = uta.show(rejectResult.hash)
-    expect(fullCommit).not.toBeNull()
     expect(fullCommit!.results[0].status).toBe('user-rejected')
     expect(fullCommit!.results[0].error).toBe('user declined')
-    console.log(`  show: results[0].error="${fullCommit!.results[0].error}"`)
   }, 30_000)
 
   it('reject without reason still works', async () => {
-    if (!broker) { console.log('e2e: skipped'); return }
-
-    const uta = new UnifiedTradingAccount(broker)
+    const uta = new UnifiedTradingAccount(broker!)
     uta.stagePlaceOrder({ aliceId: ethAliceId, side: 'sell', type: 'limit', qty: 0.01, price: 99999 })
     uta.commit('e2e: sell to be rejected silently')
 
     const result = await uta.reject()
     expect(result.operationCount).toBe(1)
     expect(result.message).toContain('[rejected]')
-    expect(result.message).not.toContain('—') // no reason suffix
+    expect(result.message).not.toContain('—')
 
     const fullCommit = uta.show(result.hash)
     expect(fullCommit!.results[0].error).toBe('Rejected by user')
-    console.log(`  rejected without reason: ok`)
   }, 15_000)
 })

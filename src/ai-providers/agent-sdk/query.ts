@@ -213,14 +213,35 @@ export async function askAgentSdk(
         } else {
           ok = false
           resultText = result.errors?.join('\n') ?? `Agent SDK error: ${result.subtype}`
+          // Log failed results with all available detail
+          const resultDetail = { subtype: result.subtype, errors: result.errors, result: result.result }
+          logger.error({ ...resultDetail, turns: result.num_turns, durationMs: result.duration_ms }, 'result_error')
+          console.error('[agent-sdk] Non-success result:', resultDetail)
         }
         logger.info({ subtype: result.subtype, turns: result.num_turns, durationMs: result.duration_ms }, 'result')
       }
     }
   } catch (err) {
-    logger.error({ error: String(err) }, 'query_error')
+    // Extract as much detail as possible from the error
+    const errObj = err instanceof Error ? err : new Error(String(err))
+    const details: Record<string, unknown> = {
+      message: errObj.message,
+      stack: errObj.stack,
+    }
+    // SDK errors may carry stderr/stdout/cause as extra properties
+    for (const key of ['stderr', 'stdout', 'cause', 'code', 'signal'] as const) {
+      if ((errObj as any)[key] != null) details[key] = (errObj as any)[key]
+    }
+    // Enumerate any non-standard properties on the error object
+    const extraKeys = Object.keys(errObj).filter(k => !(k in details))
+    for (const k of extraKeys) details[k] = (errObj as any)[k]
+
+    logger.error(details, 'query_error')
+    // Also log to console so the developer can see it in the terminal
+    console.error('[agent-sdk] Claude Code process error:', details)
     ok = false
-    resultText = `Agent SDK error: ${err}`
+    const stderrHint = details.stderr ? `\nstderr: ${details.stderr}` : ''
+    resultText = `Agent SDK error: ${errObj.message}${stderrHint}`
   }
 
   // Fallback: if result is empty, extract last assistant text

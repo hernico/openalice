@@ -97,7 +97,7 @@ function ToastNotification({ toast, onDismiss }: { toast: ToastItem; onDismiss: 
         pointer-events-auto flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-lg border text-sm
         transition-all duration-200
         ${isSuccess ? 'bg-green/10 border-green/30 text-green' : 'bg-red/10 border-red/30 text-red'}
-        ${mounted && !toast.removing ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}
+        ${mounted && !toast.removing ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4'}
       `}
       role="alert"
     >

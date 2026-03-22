@@ -15,7 +15,6 @@ import './contract-ext.js'
 export interface AccountSummary {
   id: string
   label: string
-  platformId?: string
   capabilities: AccountCapabilities
   health: BrokerHealthInfo
 }
@@ -72,7 +71,6 @@ export class AccountManager {
     return Array.from(this.entries.values()).map((uta) => ({
       id: uta.id,
       label: uta.label,
-      platformId: uta.platformId,
       capabilities: uta.getCapabilities(),
       health: uta.getHealthInfo(),
     }))
@@ -120,23 +118,19 @@ export class AccountManager {
 
   // ---- Cross-account aggregation ----
 
-  /** Throttle: only warn once per account per 5 minutes */
-  private equityWarnedAt = new Map<string, number>()
-  private static readonly EQUITY_WARN_INTERVAL_MS = 5 * 60_000
-
   async getAggregatedEquity(): Promise<AggregatedEquity> {
     const results = await Promise.all(
       Array.from(this.entries.values()).map(async (uta) => {
+        // Unhealthy UTA → skip data query, nudge recovery to retry sooner
+        if (uta.health !== 'healthy') {
+          uta.nudgeRecovery()
+          return { id: uta.id, label: uta.label, health: uta.health, info: null }
+        }
         try {
           const info = await uta.getAccount()
           return { id: uta.id, label: uta.label, health: uta.health, info }
-        } catch (err) {
-          const now = Date.now()
-          const lastWarned = this.equityWarnedAt.get(uta.id) ?? 0
-          if (now - lastWarned > AccountManager.EQUITY_WARN_INTERVAL_MS) {
-            console.warn(`getAggregatedEquity: ${uta.id} failed, skipping:`, err)
-            this.equityWarnedAt.set(uta.id, now)
-          }
+        } catch {
+          // Healthy UTA failed this call — _callBroker already updated health + SSE
           return { id: uta.id, label: uta.label, health: uta.health, info: null }
         }
       }),
@@ -180,8 +174,16 @@ export class AccountManager {
 
     const results = await Promise.all(
       targets.map(async (uta) => {
-        const descriptions = await uta.searchContracts(pattern)
-        return { accountId: uta.id, results: descriptions }
+        if (uta.health !== 'healthy') {
+          uta.nudgeRecovery()
+          return { accountId: uta.id, results: [] as ContractDescription[] }
+        }
+        try {
+          const descriptions = await uta.searchContracts(pattern)
+          return { accountId: uta.id, results: descriptions }
+        } catch {
+          return { accountId: uta.id, results: [] as ContractDescription[] }
+        }
       }),
     )
 

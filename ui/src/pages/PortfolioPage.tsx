@@ -175,7 +175,7 @@ function HeroItem({ label, value, pnl }: { label: string; value: string; pnl?: n
   return (
     <div>
       <p className="text-[11px] text-text-muted uppercase tracking-wide">{label}</p>
-      <p className={`text-[20px] md:text-[24px] font-semibold ${color}`}>{value}</p>
+      <p className={`text-[22px] md:text-[28px] font-bold tabular-nums ${color}`}>{value}</p>
     </div>
   )
 }
@@ -229,11 +229,10 @@ interface PositionWithAccount extends Position {
   accountProvider: string
 }
 
-/** True when the position carries derivative-specific context worth showing (side/leverage). */
+/** True when the position carries derivative-specific context worth showing. */
 function isDerivative(p: Position): boolean {
   const t = p.contract.secType
   if (t === 'FUT' || t === 'OPT' || t === 'FOP') return true
-  if (t === 'CRYPTO' && (p.leverage ?? 1) > 1) return true
   return p.side === 'short'
 }
 
@@ -254,7 +253,7 @@ function contractDisplay(p: Position): { name: string; tag?: string } {
     return { name: expiry ? `${sym} ${expiry}` : sym, tag: 'fut' }
   }
   if (t === 'CRYPTO') {
-    return { name: sym, tag: (p.leverage ?? 1) > 1 ? 'swap' : 'spot' }
+    return { name: sym, tag: 'spot' }
   }
   // STK, CASH, BOND, CMDTY, etc. — just the symbol, no tag
   return { name: sym }
@@ -283,7 +282,6 @@ function PositionsTable({ positions }: { positions: PositionWithAccount[] }) {
             {positions.map((p, i) => {
               const display = contractDisplay(p)
               const deriv = isDerivative(p)
-              const hasMarginInfo = p.margin || p.liquidationPrice
 
               return (
                 <tr key={i} className="border-t border-border hover:bg-bg-tertiary/30 transition-colors">
@@ -299,19 +297,8 @@ function PositionsTable({ positions }: { positions: PositionWithAccount[] }) {
                           {p.side}
                         </span>
                       )}
-                      {(p.leverage ?? 1) > 1 && (
-                        <span className="text-[10px] px-1 py-0.5 rounded bg-accent/15 text-accent font-medium">{p.leverage}x</span>
-                      )}
                       <span className="text-[10px] text-text-muted/50">{p.accountLabel}</span>
                     </div>
-                    {/* Secondary: margin / liquidation for derivatives */}
-                    {hasMarginInfo && (
-                      <div className="text-[11px] text-text-muted mt-0.5">
-                        {p.margin ? `Margin ${fmt(p.margin)}` : ''}
-                        {p.margin && p.liquidationPrice ? ' \u00b7 ' : ''}
-                        {p.liquidationPrice ? `Liq ${fmt(p.liquidationPrice)}` : ''}
-                      </div>
-                    )}
                   </td>
                   <td className="px-3 py-2 text-right text-text">{fmtNum(Number(p.quantity))}</td>
                   <td className="px-3 py-2 text-right text-text-muted">{fmt(p.avgCost)}</td>

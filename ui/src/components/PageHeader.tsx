@@ -9,9 +9,9 @@ interface PageHeaderProps {
 export function PageHeader({ title, description, right }: PageHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border">
-      <div className="px-4 md:px-6 py-4 flex items-center justify-between">
+      <div className="px-4 md:px-6 py-5 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-text">{title}</h2>
+          <h2 className="text-lg font-bold text-text">{title}</h2>
           {description && (
             <p className="text-[12px] text-text-muted mt-0.5">{description}</p>
           )}

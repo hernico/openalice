@@ -49,15 +49,17 @@ describe('UTA — full trading lifecycle', () => {
     expect(account.totalCashValue).toBe(100_000 - 10 * 150)
   })
 
-  it('market buy → sync confirms filled', async () => {
+  it('market buy fills at push time — no sync needed', async () => {
     uta.stagePlaceOrder({ aliceId: 'mock-paper|AAPL', symbol: 'AAPL', side: 'buy', type: 'market', qty: 10 })
     uta.commit('buy AAPL')
-    await uta.push()
+    const pushResult = await uta.push()
 
-    // Sync detects fill (MockBroker market orders are internally filled)
+    // Market order fills synchronously — status is 'filled' at push time
+    expect(pushResult.submitted[0].status).toBe('filled')
+
+    // Sync has nothing to do (order already resolved)
     const syncResult = await uta.sync()
-    expect(syncResult.updatedCount).toBe(1)
-    expect(syncResult.updates[0].currentStatus).toBe('filled')
+    expect(syncResult.updatedCount).toBe(0)
   })
 
   it('getState reflects positions and pending orders', async () => {

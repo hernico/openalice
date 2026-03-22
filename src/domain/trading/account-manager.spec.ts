@@ -8,8 +8,8 @@ import {
 } from './brokers/mock/index.js'
 import './contract-ext.js'
 
-function makeUta(broker: MockBroker, platformId?: string): UnifiedTradingAccount {
-  return new UnifiedTradingAccount(broker, { platformId })
+function makeUta(broker: MockBroker): UnifiedTradingAccount {
+  return new UnifiedTradingAccount(broker)
 }
 
 describe('AccountManager', () => {
@@ -63,14 +63,6 @@ describe('AccountManager', () => {
       expect(list[1].id).toBe('a2')
     })
 
-    it('includes platformId when provided', () => {
-      manager.add(makeUta(new MockBroker({ id: 'a1' }), 'alpaca-paper'))
-      manager.add(makeUta(new MockBroker({ id: 'a2' })))
-
-      const list = manager.listAccounts()
-      expect(list[0].platformId).toBe('alpaca-paper')
-      expect(list[1].platformId).toBeUndefined()
-    })
   })
 
   // ==================== resolve ====================

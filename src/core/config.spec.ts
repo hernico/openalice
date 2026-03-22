@@ -23,11 +23,8 @@ import {
   readToolsConfig,
   readAgentConfig,
   readMarketDataConfig,
-  loadTradingConfig,
   writeConfigSection,
-  readPlatformsConfig,
   readAccountsConfig,
-  writePlatformsConfig,
   writeAccountsConfig,
   aiProviderSchema,
 } from './config.js'
@@ -227,99 +224,47 @@ describe('writeConfigSection', () => {
   })
 })
 
-// ==================== readPlatformsConfig / writeAccountsConfig ====================
-
-describe('readPlatformsConfig', () => {
-  it('returns empty array when file is missing', async () => {
-    const enoent = new Error('ENOENT') as NodeJS.ErrnoException
-    enoent.code = 'ENOENT'
-    mockReadFile.mockRejectedValueOnce(enoent)
-    const platforms = await readPlatformsConfig()
-    expect(platforms).toEqual([])
-  })
-
-  it('parses platforms from file', async () => {
-    fileReturns([{ id: 'bybit-platform', type: 'ccxt', exchange: 'bybit' }])
-    const platforms = await readPlatformsConfig()
-    expect(platforms).toHaveLength(1)
-    expect(platforms[0].type).toBe('ccxt')
-    expect((platforms[0] as any).exchange).toBe('bybit')
-  })
-})
+// ==================== readAccountsConfig / writeAccountsConfig ====================
 
 describe('readAccountsConfig', () => {
-  it('returns empty array when file is missing', async () => {
+  it('returns empty array and seeds file when missing', async () => {
     const enoent = new Error('ENOENT') as NodeJS.ErrnoException
     enoent.code = 'ENOENT'
     mockReadFile.mockRejectedValueOnce(enoent)
     const accounts = await readAccountsConfig()
     expect(accounts).toEqual([])
+    // Should seed empty accounts.json
+    expect(mockWriteFile).toHaveBeenCalledTimes(1)
   })
 
-  it('parses accounts from file', async () => {
-    fileReturns([{ id: 'bybit-main', platformId: 'bybit-platform', apiKey: 'key1', apiSecret: 'sec1' }])
+  it('parses ccxt account from file', async () => {
+    fileReturns([{ id: 'bybit-main', type: 'ccxt', exchange: 'bybit', apiKey: 'key1', apiSecret: 'sec1' }])
     const accounts = await readAccountsConfig()
     expect(accounts).toHaveLength(1)
     expect(accounts[0].id).toBe('bybit-main')
-    expect(accounts[0].platformId).toBe('bybit-platform')
-  })
-})
-
-describe('writePlatformsConfig', () => {
-  it('writes validated platforms to platforms.json', async () => {
-    await writePlatformsConfig([{ id: 'alpaca-platform', type: 'alpaca', paper: true }])
-    const filePath = mockWriteFile.mock.calls[0][0] as string
-    expect(filePath).toMatch(/platforms\.json$/)
-    const written = JSON.parse(mockWriteFile.mock.calls[0][1] as string)
-    expect(written[0].type).toBe('alpaca')
+    expect(accounts[0].type).toBe('ccxt')
   })
 
-  it('throws ZodError for invalid platform type', async () => {
-    await expect(
-      writePlatformsConfig([{ id: 'bad', type: 'unknown-type' } as any])
-    ).rejects.toThrow()
-    expect(mockWriteFile).not.toHaveBeenCalled()
+  it('parses alpaca account from file', async () => {
+    fileReturns([{ id: 'alpaca-paper', type: 'alpaca', paper: true, apiKey: 'k', apiSecret: 's' }])
+    const accounts = await readAccountsConfig()
+    expect(accounts).toHaveLength(1)
+    expect(accounts[0].type).toBe('alpaca')
   })
 })
 
 describe('writeAccountsConfig', () => {
   it('writes validated accounts to accounts.json', async () => {
-    await writeAccountsConfig([{ id: 'acc-1', platformId: 'plat-1', guards: [] }])
+    await writeAccountsConfig([{ id: 'acc-1', type: 'alpaca', paper: true, guards: [] }])
     const filePath = mockWriteFile.mock.calls[0][0] as string
     expect(filePath).toMatch(/accounts\.json$/)
   })
-})
 
-// ==================== loadTradingConfig ====================
-
-describe('loadTradingConfig', () => {
-  it('returns platforms + accounts directly when both files exist', async () => {
-    // platforms.json
-    fileReturns([{ id: 'bybit-p', type: 'ccxt', exchange: 'bybit' }])
-    // accounts.json
-    fileReturns([{ id: 'bybit-main', platformId: 'bybit-p' }])
-
-    const { platforms, accounts } = await loadTradingConfig()
-    expect(platforms).toHaveLength(1)
-    expect(platforms[0].id).toBe('bybit-p')
-    expect(accounts).toHaveLength(1)
-    expect(accounts[0].id).toBe('bybit-main')
-    // No migration write should occur
+  it('throws ZodError for invalid account type', async () => {
+    await expect(
+      writeAccountsConfig([{ id: 'bad', type: 'unknown-type' } as any])
+    ).rejects.toThrow()
     expect(mockWriteFile).not.toHaveBeenCalled()
-  })
-
-  it('seeds empty arrays when config files are missing', async () => {
-    fileNotFound() // platforms.json
-    fileNotFound() // accounts.json
-
-    const { platforms, accounts } = await loadTradingConfig()
-    expect(platforms).toHaveLength(0)
-    expect(accounts).toHaveLength(0)
-
-    // Should have written empty platforms.json and accounts.json
-    const writtenPaths = mockWriteFile.mock.calls.map(c => c[0] as string)
-    expect(writtenPaths.some(p => p.endsWith('platforms.json'))).toBe(true)
-    expect(writtenPaths.some(p => p.endsWith('accounts.json'))).toBe(true)
   })
 })
 

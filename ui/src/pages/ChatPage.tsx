@@ -271,11 +271,12 @@ export function ChatPage({ onSSEStatus }: ChatPageProps) {
         <div ref={containerRef} className="h-full overflow-y-auto px-5 py-6">
         {messages.length === 0 && !isWaiting && (
           <div className="flex-1 flex flex-col items-center justify-center h-full gap-4 select-none">
-            <div className="w-14 h-14 rounded-2xl bg-bg-secondary border border-border flex items-center justify-center text-accent">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-              </svg>
-            </div>
+            <img
+              src="/alice.ico"
+              alt="Alice"
+              className="w-14 h-14 rounded-2xl ring-1 ring-accent/20 shadow-[0_0_16px_rgba(88,166,255,0.12)]"
+              draggable={false}
+            />
             <div className="text-center">
               {activeChannel === 'default' ? (
                 <>

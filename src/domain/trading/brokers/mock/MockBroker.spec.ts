@@ -213,15 +213,18 @@ describe('cancelOrder', () => {
 
     const placed = await broker.placeOrder(contract, order)
     const cancelled = await broker.cancelOrder(placed.orderId!)
-    expect(cancelled).toBe(true)
+    expect(cancelled.success).toBe(true)
+    expect(cancelled.orderId).toBe(placed.orderId)
+    expect(cancelled.orderState?.status).toBe('Cancelled')
 
     const brokerOrder = await broker.getOrder(placed.orderId!)
     expect(brokerOrder!.orderState.status).toBe('Cancelled')
   })
 
-  it('returns false for unknown order', async () => {
+  it('returns error for unknown order', async () => {
     const result = await broker.cancelOrder('nonexistent')
-    expect(result).toBe(false)
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('nonexistent')
   })
 })
 

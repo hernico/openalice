@@ -33,11 +33,12 @@ const CHECK_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" 
 
 function AliceAvatar() {
   return (
-    <div className="w-6 h-6 rounded-full bg-accent/15 flex items-center justify-center text-accent shrink-0">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-      </svg>
-    </div>
+    <img
+      src="/alice.ico"
+      alt="Alice"
+      className="w-6 h-6 rounded-full ring-1 ring-accent/20 shrink-0"
+      draggable={false}
+    />
   )
 }
 
@@ -131,7 +132,7 @@ export function ChatMessage({ role, text, timestamp, isGrouped, media }: ChatMes
           <span className="text-[12px] text-text-muted font-medium">Alice</span>
         </div>
       )}
-      <div ref={contentRef} className="max-w-[90%] break-words leading-relaxed ml-8">
+      <div ref={contentRef} className="max-w-[90%] break-words leading-relaxed ml-8 bg-bg-tertiary/30 border border-border/30 rounded-2xl rounded-tl-sm px-4 py-3">
         <div className="markdown-content" dangerouslySetInnerHTML={{ __html: html! }} />
         {media?.map((m, i) => (
           <img key={i} src={m.url} alt="" className="max-w-full rounded-lg mt-2" />

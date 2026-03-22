@@ -92,7 +92,6 @@ export function makePosition(overrides: Partial<Position> = {}): Position {
     marketValue: 1600,
     unrealizedPnL: 100,
     realizedPnL: 0,
-    leverage: 1,
     ...overrides,
   }
 }
@@ -251,14 +250,14 @@ export class MockBroker implements IBroker {
     return { success: true, orderId, orderState }
   }
 
-  async modifyOrder(orderId: string, changes: Order): Promise<PlaceOrderResult> {
+  async modifyOrder(orderId: string, changes: Partial<Order>): Promise<PlaceOrderResult> {
     this._record('modifyOrder', [orderId, changes])
     const internal = this._orders.get(orderId)
     if (!internal || internal.status !== 'Submitted') {
       return { success: false, error: `Order ${orderId} not found or not pending` }
     }
 
-    if (!changes.totalQuantity.equals(UNSET_DECIMAL)) {
+    if (changes.totalQuantity != null && !changes.totalQuantity.equals(UNSET_DECIMAL)) {
       internal.order.totalQuantity = changes.totalQuantity
     }
     if (changes.lmtPrice !== UNSET_DOUBLE) {
@@ -273,12 +272,16 @@ export class MockBroker implements IBroker {
     return { success: true, orderId, orderState }
   }
 
-  async cancelOrder(orderId: string): Promise<boolean> {
+  async cancelOrder(orderId: string): Promise<PlaceOrderResult> {
     this._record('cancelOrder', [orderId])
     const internal = this._orders.get(orderId)
-    if (!internal || internal.status !== 'Submitted') return false
+    if (!internal || internal.status !== 'Submitted') {
+      return { success: false, error: `Order ${orderId} not found or not pending` }
+    }
     internal.status = 'Cancelled'
-    return true
+    const orderState = new OrderState()
+    orderState.status = 'Cancelled'
+    return { success: true, orderId, orderState }
   }
 
   async closePosition(contract: Contract, quantity?: Decimal): Promise<PlaceOrderResult> {

@@ -1,5 +1,43 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import type { EngineContext } from '../../../core/types.js'
+import { BrokerError } from '../../../domain/trading/brokers/types.js'
+import type { UnifiedTradingAccount } from '../../../domain/trading/UnifiedTradingAccount.js'
+
+/** Resolve account by :id param, return 404 if not found. */
+function resolveAccount(ctx: EngineContext, c: Context): UnifiedTradingAccount | null {
+  return ctx.accountManager.get(c.req.param('id')) ?? null
+}
+
+/**
+ * Execute a data query against a UTA with health-aware error handling.
+ * - Offline → 503 + nudge recovery
+ * - Transient error → 503
+ * - Permanent error → 500
+ */
+async function queryAccount<T>(
+  c: Context,
+  account: UnifiedTradingAccount,
+  fn: () => Promise<T>,
+): Promise<Response> {
+  if (account.health === 'offline') {
+    account.nudgeRecovery()
+    return c.json({
+      error: 'Account temporarily unavailable',
+      health: account.getHealthInfo(),
+    }, 503)
+  }
+  try {
+    return c.json(await fn())
+  } catch (err) {
+    const be = err instanceof BrokerError ? err : BrokerError.from(err)
+    return c.json({
+      error: be.message,
+      code: be.code,
+      transient: !be.permanent,
+    }, be.permanent ? 500 : 503)
+  }
+}
 
 /** Unified trading routes — works with all account types via AccountManager */
 export function createTradingRoutes(ctx: EngineContext) {
@@ -14,12 +52,8 @@ export function createTradingRoutes(ctx: EngineContext) {
   // ==================== Aggregated equity ====================
 
   app.get('/equity', async (c) => {
-    try {
-      const equity = await ctx.accountManager.getAggregatedEquity()
-      return c.json(equity)
-    } catch (err) {
-      return c.json({ error: String(err) }, 500)
-    }
+    const equity = await ctx.accountManager.getAggregatedEquity()
+    return c.json(equity)
   })
 
   // ==================== Per-account routes ====================
@@ -33,67 +67,47 @@ export function createTradingRoutes(ctx: EngineContext) {
 
   // Account info
   app.get('/accounts/:id/account', async (c) => {
-    const account = ctx.accountManager.get(c.req.param('id'))
+    const account = resolveAccount(ctx, c)
     if (!account) return c.json({ error: 'Account not found' }, 404)
-    try {
-      return c.json(await account.getAccount())
-    } catch (err) {
-      return c.json({ error: String(err) }, 500)
-    }
+    return queryAccount(c, account, () => account.getAccount())
   })
 
   // Positions
   app.get('/accounts/:id/positions', async (c) => {
-    const account = ctx.accountManager.get(c.req.param('id'))
+    const account = resolveAccount(ctx, c)
     if (!account) return c.json({ error: 'Account not found' }, 404)
-    try {
-      const positions = await account.getPositions()
-      return c.json({ positions })
-    } catch (err) {
-      return c.json({ error: String(err) }, 500)
-    }
+    return queryAccount(c, account, async () => ({ positions: await account.getPositions() }))
   })
 
   // Orders
   app.get('/accounts/:id/orders', async (c) => {
-    const account = ctx.accountManager.get(c.req.param('id'))
+    const account = resolveAccount(ctx, c)
     if (!account) return c.json({ error: 'Account not found' }, 404)
-    try {
-      // Default to pending orders if no ids specified
+    return queryAccount(c, account, async () => {
       const idsParam = c.req.query('ids')
       const orderIds = idsParam ? idsParam.split(',') : account.getPendingOrderIds().map(p => p.orderId)
       const orders = await account.getOrders(orderIds)
-      return c.json({ orders })
-    } catch (err) {
-      return c.json({ error: String(err) }, 500)
-    }
+      return { orders }
+    })
   })
 
-  // Market clock (optional capability)
+  // Market clock
   app.get('/accounts/:id/market-clock', async (c) => {
-    const account = ctx.accountManager.get(c.req.param('id'))
+    const account = resolveAccount(ctx, c)
     if (!account) return c.json({ error: 'Account not found' }, 404)
-    if (!account.getMarketClock) return c.json({ error: 'Market clock not supported' }, 501)
-    try {
-      return c.json(await account.getMarketClock())
-    } catch (err) {
-      return c.json({ error: String(err) }, 500)
-    }
+    return queryAccount(c, account, () => account.getMarketClock())
   })
 
   // Quote
   app.get('/accounts/:id/quote/:symbol', async (c) => {
-    const account = ctx.accountManager.get(c.req.param('id'))
+    const account = resolveAccount(ctx, c)
     if (!account) return c.json({ error: 'Account not found' }, 404)
-    try {
+    return queryAccount(c, account, async () => {
       const { Contract } = await import('@traderalice/ibkr')
       const contract = new Contract()
       contract.symbol = c.req.param('symbol')
-      const quote = await account.getQuote(contract)
-      return c.json(quote)
-    } catch (err) {
-      return c.json({ error: String(err) }, 500)
-    }
+      return account.getQuote(contract)
+    })
   })
 
   // ==================== Per-account wallet/git routes ====================

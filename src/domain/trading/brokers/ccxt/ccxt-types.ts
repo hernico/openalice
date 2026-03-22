@@ -23,3 +23,33 @@ export interface CcxtMarket {
 
 export const MAX_INIT_RETRIES = 8
 export const INIT_RETRY_BASE_MS = 500
+
+// ==================== CCXT-specific types (not part of IBroker) ====================
+
+import type { Contract } from '@traderalice/ibkr'
+import type { Position } from '../types.js'
+
+/** Position with crypto-specific fields (leverage, margin, liquidation). */
+export interface CcxtPosition extends Position {
+  leverage?: number
+  margin?: number
+  liquidationPrice?: number
+}
+
+export interface FundingRate {
+  contract: Contract
+  fundingRate: number
+  nextFundingTime?: Date
+  previousFundingRate?: number
+  timestamp: Date
+}
+
+/** [price, amount] */
+export type OrderBookLevel = [price: number, amount: number]
+
+export interface OrderBook {
+  contract: Contract
+  bids: OrderBookLevel[]
+  asks: OrderBookLevel[]
+  timestamp: Date
+}

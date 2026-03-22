@@ -1,94 +1,46 @@
 /**
- * Broker Factory — creates broker instances from config.
+ * Broker Factory — creates broker instances from account config.
  *
- * IPlatform defines HOW to connect (exchange type, sandbox, etc.).
- * Multiple accounts can share one platform, each with individual credentials.
+ * Single function: AccountConfig → IBroker. No intermediate platform layer.
  */
 
 import type { IBroker } from './types.js'
-import { CcxtPlatform } from './ccxt/CcxtPlatform.js'
-import { AlpacaPlatform } from './alpaca/AlpacaPlatform.js'
-import type { PlatformConfig, AccountConfig } from '../../../core/config.js'
+import { CcxtBroker } from './ccxt/CcxtBroker.js'
+import { AlpacaBroker } from './alpaca/AlpacaBroker.js'
+import { IbkrBroker } from './ibkr/IbkrBroker.js'
+import type { AccountConfig } from '../../../core/config.js'
 
-// ==================== Platform ====================
-
-/** Credentials passed to IPlatform.createAccount(). */
-export interface PlatformCredentials {
-  id: string
-  label?: string
-  apiKey?: string
-  apiSecret?: string
-  password?: string
-}
-
-export interface IPlatform {
-  /** Unique platform id, e.g. "bybit-swap", "alpaca-paper". */
-  readonly id: string
-
-  /** Human-readable name, e.g. "Bybit USDT Perps". */
-  readonly label: string
-
-  /**
-   * Provider class tag. Matches IBroker.provider on created accounts.
-   * CcxtPlatform → exchange name (e.g. "bybit").
-   * AlpacaPlatform → "alpaca".
-   */
-  readonly providerType: string
-
-  /** Create a new IBroker instance from per-account credentials. */
-  createAccount(credentials: PlatformCredentials): IBroker
-}
-
-// ==================== Config → Platform/Broker helpers ====================
-
-/** Create an IPlatform from a parsed PlatformConfig. */
-export function createPlatformFromConfig(config: PlatformConfig): IPlatform {
+/** Create an IBroker from a merged account config. */
+export function createBroker(config: AccountConfig): IBroker {
   switch (config.type) {
     case 'ccxt':
-      return new CcxtPlatform({
+      return new CcxtBroker({
         id: config.id,
         label: config.label,
         exchange: config.exchange,
         sandbox: config.sandbox,
         demoTrading: config.demoTrading,
         options: config.options,
+        apiKey: config.apiKey ?? '',
+        apiSecret: config.apiSecret ?? '',
+        password: config.password,
       })
     case 'alpaca':
-      return new AlpacaPlatform({
+      return new AlpacaBroker({
         id: config.id,
         label: config.label,
+        apiKey: config.apiKey ?? '',
+        secretKey: config.apiSecret ?? '',
         paper: config.paper,
       })
-  }
-}
-
-/** Create an IBroker from a platform + account config. */
-export function createBrokerFromConfig(
-  platform: IPlatform,
-  accountConfig: AccountConfig,
-): IBroker {
-  const credentials: PlatformCredentials = {
-    id: accountConfig.id,
-    label: accountConfig.label,
-    apiKey: accountConfig.apiKey,
-    apiSecret: accountConfig.apiSecret,
-    password: accountConfig.password,
-  }
-  return platform.createAccount(credentials)
-}
-
-/** Validate that all account platformId references resolve to a known platform. */
-export function validatePlatformRefs(
-  platforms: IPlatform[],
-  accounts: AccountConfig[],
-): void {
-  const platformIds = new Set(platforms.map((p) => p.id))
-  for (const acc of accounts) {
-    if (!platformIds.has(acc.platformId)) {
-      throw new Error(
-        `Account "${acc.id}" references unknown platformId "${acc.platformId}". ` +
-          `Available platforms: ${[...platformIds].join(', ')}`,
-      )
-    }
+    case 'ibkr':
+      return new IbkrBroker({
+        id: config.id,
+        label: config.label,
+        host: config.host,
+        port: config.port,
+        clientId: config.clientId,
+        accountId: config.accountId,
+      })
   }
 }

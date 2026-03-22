@@ -274,24 +274,27 @@ describe('AlpacaBroker — modifyOrder()', () => {
 describe('AlpacaBroker — cancelOrder()', () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it('returns true on success', async () => {
+  it('returns PlaceOrderResult with Cancelled status on success', async () => {
     const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       cancelOrder: vi.fn().mockResolvedValue(undefined),
     }
 
     const result = await acc.cancelOrder('ord-1')
-    expect(result).toBe(true)
+    expect(result.success).toBe(true)
+    expect(result.orderId).toBe('ord-1')
+    expect(result.orderState?.status).toBe('Cancelled')
   })
 
-  it('returns false on API failure', async () => {
+  it('returns PlaceOrderResult with error on API failure', async () => {
     const acc = new AlpacaBroker({ apiKey: 'k', secretKey: 's', paper: true })
     ;(acc as any).client = {
       cancelOrder: vi.fn().mockRejectedValue(new Error('Cannot cancel')),
     }
 
     const result = await acc.cancelOrder('ord-1')
-    expect(result).toBe(false)
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('Cannot cancel')
   })
 })
 

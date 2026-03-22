@@ -49,6 +49,23 @@ function detectCustomMode(provider: string, model: string): boolean {
   return !presets.some((p) => p.value === model)
 }
 
+/** UI-level backend. 'openai' is a facade over vercel-ai-sdk with provider=openai. */
+type UIBackend = 'agent-sdk' | 'openai' | 'vercel-ai-sdk'
+
+/** Default provider/model per UI backend — applied on every switch to avoid stale config. */
+const BACKEND_DEFAULTS: Record<UIBackend, { backend: string; provider: string; model: string }> = {
+  'agent-sdk':    { backend: 'agent-sdk',    provider: 'anthropic', model: 'claude-sonnet-4-6' },
+  'openai':       { backend: 'vercel-ai-sdk', provider: 'openai',   model: PROVIDER_MODELS.openai[0].value },
+  'vercel-ai-sdk': { backend: 'vercel-ai-sdk', provider: 'anthropic', model: PROVIDER_MODELS.anthropic[0].value },
+}
+
+/** Derive initial UI backend from config. */
+function detectUIBackend(config: AIProviderConfig): UIBackend {
+  if (config.backend === 'vercel-ai-sdk' && config.provider === 'openai') return 'openai'
+  if (config.backend === 'vercel-ai-sdk') return 'vercel-ai-sdk'
+  return 'agent-sdk'
+}
+
 function BackendCard({ selected, onClick, icon, title, description }: {
   selected: boolean
   onClick: () => void
@@ -81,16 +98,21 @@ export function AIProviderPage() {
     api.config.load().then(setConfig).catch(() => {})
   }, [])
 
+  const uiBackend: UIBackend = config ? detectUIBackend(config.aiProvider) : 'agent-sdk'
+
   const handleBackendSwitch = useCallback(
-    async (backend: string) => {
+    async (target: UIBackend) => {
+      if (!config) return
       try {
-        await api.config.setBackend(backend)
-        setConfig((c) => c ? { ...c, aiProvider: { ...c.aiProvider, backend } } : c)
+        const defaults = BACKEND_DEFAULTS[target]
+        const updated = { ...config.aiProvider, ...defaults }
+        await api.config.updateSection('aiProvider', updated)
+        setConfig((c) => c ? { ...c, aiProvider: updated } : c)
       } catch {
         // Button state reflects actual saved state
       }
     },
-    [],
+    [config],
   )
 
   return (
@@ -102,34 +124,48 @@ export function AIProviderPage() {
           <div className="max-w-[880px] mx-auto">
             {/* Backend */}
             <ConfigSection title="Backend" description="Changes take effect immediately.">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <BackendCard
-                  selected={config.aiProvider.backend === 'agent-sdk'}
+                  selected={uiBackend === 'agent-sdk'}
                   onClick={() => handleBackendSwitch('agent-sdk')}
                   icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a4 4 0 0 1 4 4v1a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V6a4 4 0 0 1 4-4z" /><path d="M8 8v2a4 4 0 0 0 8 0V8" /><path d="M12 14v4" /><path d="M8 22h8" /><circle cx="9" cy="5.5" r="0.5" fill="currentColor" stroke="none" /><circle cx="15" cy="5.5" r="0.5" fill="currentColor" stroke="none" /></svg>}
                   title="Claude"
-                  description="Local Claude Code login with full tool access"
+                  description="Claude Code login or Anthropic API key"
                 />
                 <BackendCard
-                  selected={config.aiProvider.backend === 'vercel-ai-sdk'}
+                  selected={uiBackend === 'openai'}
+                  onClick={() => handleBackendSwitch('openai')}
+                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" /></svg>}
+                  title="OpenAI"
+                  description="GPT models via OpenAI API"
+                />
+                <BackendCard
+                  selected={uiBackend === 'vercel-ai-sdk'}
                   onClick={() => handleBackendSwitch('vercel-ai-sdk')}
                   icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
                   title="Vercel AI SDK"
-                  description="Direct API calls to Anthropic, OpenAI, Google"
+                  description="Multi-provider, custom endpoints"
                 />
               </div>
             </ConfigSection>
 
             {/* Auth mode (only for Agent SDK) */}
-            {config.aiProvider.backend === 'agent-sdk' && (
+            {uiBackend === 'agent-sdk' && (
               <ConfigSection title="Authentication" description="Choose how Alice connects to Claude.">
                 <AgentSdkAuthForm aiProvider={config.aiProvider} onUpdate={(patch) => setConfig((c) => c ? { ...c, aiProvider: { ...c.aiProvider, ...patch } } : c)} />
               </ConfigSection>
             )}
 
-            {/* Model (only for Vercel AI SDK) */}
-            {config.aiProvider.backend === 'vercel-ai-sdk' && (
-              <ConfigSection title="Model" description="Provider, model, and API keys for Vercel AI SDK. Changes take effect on the next request (hot-reload).">
+            {/* OpenAI simplified form */}
+            {uiBackend === 'openai' && (
+              <ConfigSection title="Model" description="Select a model and enter your OpenAI API key.">
+                <OpenAIForm aiProvider={config.aiProvider} />
+              </ConfigSection>
+            )}
+
+            {/* Full model form (only for Vercel AI SDK) */}
+            {uiBackend === 'vercel-ai-sdk' && (
+              <ConfigSection title="Model" description="Provider, model, and API keys. Changes take effect on the next request.">
                 <ModelForm aiProvider={config.aiProvider} />
               </ConfigSection>
             )}
@@ -142,7 +178,135 @@ export function AIProviderPage() {
   )
 }
 
-// ==================== Model Form ====================
+// ==================== OpenAI Form (simplified) ====================
+
+function OpenAIForm({ aiProvider }: { aiProvider: AIProviderConfig }) {
+  const presets = PROVIDER_MODELS.openai
+  const initModel = aiProvider.provider === 'openai' && aiProvider.model ? aiProvider.model : presets[0].value
+  const isPreset = presets.some((p) => p.value === initModel)
+
+  const [model, setModel] = useState(isPreset ? initModel : '')
+  const [customModel, setCustomModel] = useState(isPreset ? '' : initModel)
+  const [baseUrl, setBaseUrl] = useState(aiProvider.baseUrl || '')
+  const [apiKey, setApiKey] = useState('')
+  const [keySaveStatus, setKeySaveStatus] = useState<SaveStatus>('idle')
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const effectiveModel = model || customModel
+
+  // Auto-save model + baseUrl
+  const modelData = useMemo(
+    () => ({
+      ...aiProvider,
+      provider: 'openai',
+      model: effectiveModel,
+      ...(baseUrl ? { baseUrl } : { baseUrl: undefined }),
+    }),
+    [aiProvider, effectiveModel, baseUrl],
+  )
+
+  const saveModel = useCallback(async (data: Record<string, unknown>) => {
+    await api.config.updateSection('aiProvider', data)
+  }, [])
+
+  const { status: modelStatus, retry: modelRetry } = useAutoSave({
+    data: modelData,
+    save: saveModel,
+  })
+
+  const hasKey = !!aiProvider.apiKeys?.openai
+
+  useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current) }, [])
+
+  const handleSaveKey = async () => {
+    if (!apiKey) return
+    setKeySaveStatus('saving')
+    try {
+      const updatedKeys = { ...aiProvider.apiKeys, openai: apiKey }
+      await api.config.updateSection('aiProvider', { ...aiProvider, apiKeys: updatedKeys })
+      setApiKey('')
+      setKeySaveStatus('saved')
+      if (savedTimer.current) clearTimeout(savedTimer.current)
+      savedTimer.current = setTimeout(() => setKeySaveStatus('idle'), 2000)
+    } catch { setKeySaveStatus('error') }
+  }
+
+  const handleModelSelect = (value: string) => {
+    if (value === '__custom__') {
+      setModel('')
+      setCustomModel('')
+    } else {
+      setModel(value)
+      setCustomModel('')
+    }
+  }
+
+  return (
+    <>
+      <Field label="Model">
+        <select
+          className={inputClass}
+          value={model || '__custom__'}
+          onChange={(e) => handleModelSelect(e.target.value)}
+        >
+          {presets.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+          <option value="__custom__">Custom...</option>
+        </select>
+      </Field>
+
+      {!model && (
+        <Field label="Custom Model ID">
+          <input
+            className={inputClass}
+            value={customModel}
+            onChange={(e) => setCustomModel(e.target.value)}
+            placeholder="e.g. gpt-4o, o3-pro"
+          />
+        </Field>
+      )}
+
+      <Field label="API Key">
+        <div className="relative">
+          <input
+            className={inputClass}
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={hasKey ? '(configured)' : 'sk-...'}
+          />
+          {hasKey && (
+            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-green">active</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 mt-2">
+          <button
+            onClick={handleSaveKey}
+            disabled={!apiKey || keySaveStatus === 'saving'}
+            className="btn-primary"
+          >
+            Save Key
+          </button>
+          <SaveIndicator status={keySaveStatus} onRetry={handleSaveKey} />
+        </div>
+      </Field>
+
+      <Field label="Base URL" description="Leave empty for the official OpenAI API. Set for proxies or compatible endpoints (e.g. Azure OpenAI).">
+        <input
+          className={inputClass}
+          value={baseUrl}
+          onChange={(e) => setBaseUrl(e.target.value)}
+          placeholder="https://api.openai.com/v1"
+        />
+      </Field>
+
+      <SaveIndicator status={modelStatus} onRetry={modelRetry} />
+    </>
+  )
+}
+
+// ==================== Model Form (full Vercel AI SDK) ====================
 
 function ModelForm({ aiProvider }: { aiProvider: AIProviderConfig }) {
   // Detect whether saved config should render as "Custom" in the UI

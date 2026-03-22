@@ -204,6 +204,13 @@ export const PLATFORM_TYPE_OPTIONS: SDKOption[] = [
     badge: 'AL',
     badgeColor: 'text-green',
   },
+  {
+    id: 'ibkr',
+    name: 'IBKR (Interactive Brokers)',
+    description: 'Professional-grade trading via TWS or IB Gateway. Stocks, options, futures, bonds.',
+    badge: 'IB',
+    badgeColor: 'text-orange-400',
+  },
 ]
 
 export const DATASOURCE_OPTIONS: SDKOption[] = [

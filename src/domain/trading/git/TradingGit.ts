@@ -12,6 +12,7 @@ import type {
   CommitHash,
   Operation,
   OperationResult,
+  OperationStatus,
   AddResult,
   CommitPrepareResult,
   PushResult,
@@ -134,8 +135,8 @@ export class TradingGit implements ITradingGit {
     this.pendingMessage = null
     this.pendingHash = null
 
-    const submitted = results.filter((r) => r.status === 'submitted')
-    const rejected = results.filter((r) => r.status === 'rejected' || !r.success)
+    const rejected = results.filter((r) => !r.success)
+    const submitted = results.filter((r) => r.success)
 
     return { hash, message, operationCount: operations.length, submitted, rejected }
   }
@@ -609,14 +610,23 @@ export class TradingGit implements ITradingGit {
     const orderId = rawObj.orderId as string | undefined
     const orderState = rawObj.orderState as OperationResult['orderState']
 
-    // Push only knows submitted or rejected — actual fill status comes from sync
     return {
       action: op.action,
       success: true,
       orderId,
-      status: 'submitted',
+      status: this.mapOrderStatus(orderState),
       orderState,
       raw,
+    }
+  }
+
+  /** Map IBKR-style OrderState.status to OperationStatus. */
+  private mapOrderStatus(orderState?: { status?: string }): OperationStatus {
+    switch (orderState?.status) {
+      case 'Filled': return 'filled'
+      case 'Cancelled': return 'cancelled'
+      case 'Inactive': return 'rejected'
+      default: return 'submitted'
     }
   }
 }
