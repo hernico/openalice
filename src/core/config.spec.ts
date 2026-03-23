@@ -255,7 +255,7 @@ describe('readAccountsConfig', () => {
 
 describe('writeAccountsConfig', () => {
   it('writes validated accounts to accounts.json', async () => {
-    await writeAccountsConfig([{ id: 'acc-1', type: 'alpaca', guards: [], brokerConfig: { paper: true } }])
+    await writeAccountsConfig([{ id: 'acc-1', type: 'alpaca', enabled: true, guards: [], brokerConfig: { paper: true } }])
     const filePath = mockWriteFile.mock.calls[0][0] as string
     expect(filePath).toMatch(/accounts\.json$/)
   })

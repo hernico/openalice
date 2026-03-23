@@ -272,10 +272,10 @@ export class MockBroker implements IBroker {
     if (changes.totalQuantity != null && !changes.totalQuantity.equals(UNSET_DECIMAL)) {
       internal.order.totalQuantity = changes.totalQuantity
     }
-    if (changes.lmtPrice !== UNSET_DOUBLE) {
+    if (changes.lmtPrice != null && changes.lmtPrice !== UNSET_DOUBLE) {
       internal.order.lmtPrice = changes.lmtPrice
     }
-    if (changes.auxPrice !== UNSET_DOUBLE) {
+    if (changes.auxPrice != null && changes.auxPrice !== UNSET_DOUBLE) {
       internal.order.auxPrice = changes.auxPrice
     }
 

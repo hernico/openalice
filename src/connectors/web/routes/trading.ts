@@ -6,7 +6,9 @@ import type { UnifiedTradingAccount } from '../../../domain/trading/UnifiedTradi
 
 /** Resolve account by :id param, return 404 if not found. */
 function resolveAccount(ctx: EngineContext, c: Context): UnifiedTradingAccount | null {
-  return ctx.accountManager.get(c.req.param('id')) ?? null
+  const id = c.req.param('id')
+  if (!id) return null
+  return ctx.accountManager.get(id) ?? null
 }
 
 /**

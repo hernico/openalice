@@ -473,7 +473,7 @@ describe('TradingGit', () => {
           {
             orderId: 'order-1',
             symbol: 'AAPL',
-            previousStatus: 'pending',
+            previousStatus: 'submitted',
             currentStatus: 'filled',
             filledPrice: 155,
             filledQty: 10,
@@ -536,7 +536,7 @@ describe('TradingGit', () => {
         [{
           orderId: 'lmt-1',
           symbol: 'AAPL',
-          previousStatus: 'pending',
+          previousStatus: 'submitted',
           currentStatus: 'filled',
           filledPrice: 155,
           filledQty: 10,
@@ -589,7 +589,7 @@ describe('TradingGit', () => {
             marketValue: 1600,
             unrealizedPnL: 100,
             realizedPnL: 0,
-            leverage: 1,
+
           },
         ],
       })
@@ -619,7 +619,7 @@ describe('TradingGit', () => {
             marketValue: 1600,
             unrealizedPnL: 100,
             realizedPnL: 0,
-            leverage: 1,
+
           },
         ],
       })
@@ -641,12 +641,12 @@ describe('TradingGit', () => {
           {
             contract: makeContract({ symbol: 'AAPL' }),
             side: 'long', quantity: new Decimal(10), avgCost: 100, marketPrice: 100,
-            marketValue: 1000, unrealizedPnL: 0, realizedPnL: 0, leverage: 1,
+            marketValue: 1000, unrealizedPnL: 0, realizedPnL: 0,
           },
           {
             contract: makeContract({ symbol: 'GOOG' }),
             side: 'long', quantity: new Decimal(5), avgCost: 200, marketPrice: 200,
-            marketValue: 1000, unrealizedPnL: 0, realizedPnL: 0, leverage: 1,
+            marketValue: 1000, unrealizedPnL: 0, realizedPnL: 0,
           },
         ],
       })
@@ -666,7 +666,7 @@ describe('TradingGit', () => {
           {
             contract: makeContract({ symbol: 'AAPL' }),
             side: 'long', quantity: new Decimal(10), avgCost: 100, marketPrice: 100,
-            marketValue: 1000, unrealizedPnL: 0, realizedPnL: 0, leverage: 1,
+            marketValue: 1000, unrealizedPnL: 0, realizedPnL: 0,
           },
         ],
       })
