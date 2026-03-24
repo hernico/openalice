@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { writeFile } from 'node:fs/promises'
 import { createEventLog, type EventLog } from '../../core/event-log.js'
 import { createCronEngine, type CronEngine } from '../cron/engine.js'
 import {
@@ -10,6 +11,7 @@ import {
   isWithinActiveHours,
   HeartbeatDedup,
   HEARTBEAT_JOB_NAME,
+  resolveHeartbeatPrompt,
   type Heartbeat,
   type HeartbeatConfig,
 } from './heartbeat.js'
@@ -143,6 +145,34 @@ describe('heartbeat', () => {
   // ==================== Event Handling ====================
 
   describe('event handling', () => {
+    it('should resolve file-backed prompts before calling AI', async () => {
+      const primary = tempPath('md')
+      const fallback = tempPath('md')
+      await writeFile(primary, '# Heartbeat\nUse getAccount before deciding.', 'utf-8')
+      await writeFile(fallback, '# Heartbeat\nFallback prompt.', 'utf-8')
+
+      heartbeat = createHeartbeat({
+        config: makeConfig({
+          prompt: `Read ${primary} (or ${fallback} if not found) and follow the instructions inside.`,
+        }),
+        connectorCenter, cronEngine, eventLog,
+        agentCenter: mockEngine as any,
+        session,
+      })
+      await heartbeat.start()
+      await cronEngine.runNow(cronEngine.list()[0].id)
+
+      await vi.waitFor(() => {
+        expect(mockEngine.askWithSession).toHaveBeenCalled()
+      })
+
+      expect(mockEngine.askWithSession).toHaveBeenCalledWith(
+        '# Heartbeat\nUse getAccount before deciding.',
+        session,
+        { historyPreamble: 'The following is the recent heartbeat conversation history.' },
+      )
+    })
+
     it('should call AI and write heartbeat.done on real response', async () => {
       const delivered: string[] = []
       connectorCenter.register({
@@ -547,6 +577,24 @@ describe('parseHeartbeatResponse', () => {
     const r = parseHeartbeatResponse('STATUS: CHAT_YES\nREASON: Want to say hi.')
     expect(r.status).toBe('CHAT_YES')
     expect(r.content).toBe('')
+  })
+})
+
+describe('resolveHeartbeatPrompt', () => {
+  it('should return file contents when prompt references a primary file', async () => {
+    const primary = tempPath('md')
+    const fallback = tempPath('md')
+    await writeFile(primary, 'PRIMARY', 'utf-8')
+    await writeFile(fallback, 'FALLBACK', 'utf-8')
+
+    await expect(
+      resolveHeartbeatPrompt(`Read ${primary} (or ${fallback} if not found) and follow the instructions inside.`),
+    ).resolves.toBe('PRIMARY')
+  })
+
+  it('should fall back to the original prompt when neither file exists', async () => {
+    const prompt = `Read ${tempPath('missing')} (or ${tempPath('missing')} if not found) and follow the instructions inside.`
+    await expect(resolveHeartbeatPrompt(prompt)).resolves.toBe(prompt)
   })
 })
 

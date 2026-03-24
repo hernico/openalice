@@ -1,0 +1,10 @@
+{
+  "enabled": true,
+  "every": "10m",
+  "prompt": "Read data/brain/heartbeat.md (or data/default/heartbeat.default.md if not found) and follow the instructions inside.",
+  "activeHours": {
+    "start": "08:50",
+    "end": "16:10",
+    "timezone": "America/New_York"
+  }
+}

@@ -36,6 +36,7 @@ import { createEventLog } from './core/event-log.js'
 import { createToolCallLog } from './core/tool-call-log.js'
 import { createCronEngine, createCronListener, createCronTools } from './task/cron/index.js'
 import { createHeartbeat } from './task/heartbeat/index.js'
+import { AlpacaEvalCollector } from './task/alpaca-eval/index.js'
 import { NewsCollectorStore, NewsCollector } from './domain/news/index.js'
 import { createNewsArchiveTools } from './tool/news.js'
 
@@ -78,6 +79,7 @@ async function main() {
   const accountManager = new AccountManager({ eventLog, toolCenter })
 
   const accountConfigs = await readAccountsConfig()
+  const accountConfigById = new Map(accountConfigs.map((cfg) => [cfg.id, cfg]))
   for (const accCfg of accountConfigs) {
     if (accCfg.enabled === false) continue
     await accountManager.initAccount(accCfg)
@@ -229,6 +231,22 @@ async function main() {
     console.log(`heartbeat: enabled (every ${config.heartbeat.every})`)
   }
 
+  // ==================== Alpaca Evaluation Collector ====================
+
+  const alpacaEvalAccount = accountManager.get(config.alpacaEval.accountId) ?? null
+  const alpacaEvalAccountConfig = accountConfigById.get(config.alpacaEval.accountId)
+  const alpacaEval = new AlpacaEvalCollector({
+    config: config.alpacaEval,
+    account: alpacaEvalAccount,
+    apiKey: alpacaEvalAccountConfig?.apiKey,
+    apiSecret: alpacaEvalAccountConfig?.apiSecret,
+    eventLog,
+  })
+  await alpacaEval.start()
+  if (config.alpacaEval.enabled) {
+    console.log(`alpaca-eval: enabled (${config.alpacaEval.symbols.length} symbols, ${config.alpacaEval.marketDataFeed.toUpperCase()} feed)`)
+  }
+
   // ==================== News Collector ====================
 
   let newsCollector: NewsCollector | null = null
@@ -358,6 +376,7 @@ async function main() {
   const ctx: EngineContext = {
     config, connectorCenter, agentCenter, eventLog, toolCallLog, heartbeat, cronEngine, toolCenter,
     accountManager,
+    alpacaEval,
     reconnectConnectors,
   }
 
@@ -374,6 +393,7 @@ async function main() {
   const shutdown = async () => {
     stopped = true
     newsCollector?.stop()
+    await alpacaEval.stop()
     heartbeat.stop()
     cronListener.stop()
     cronEngine.stop()

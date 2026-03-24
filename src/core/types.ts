@@ -7,6 +7,8 @@ import type { AgentCenter } from './agent-center.js'
 import type { EventLog } from './event-log.js'
 import type { ToolCallLog } from './tool-call-log.js'
 import type { ToolCenter } from './tool-center.js'
+import type { AlpacaEvalSampler } from '../task/alpaca-eval/index.js'
+import type { AlpacaEvalSampler } from '../task/alpaca-eval/index.js'
 
 export type { Config, WebChannel }
 
@@ -34,6 +36,7 @@ export interface EngineContext {
 
   // Trading (unified account model)
   accountManager: AccountManager
+  alpacaEval?: AlpacaEvalSampler
   /** Reconnect connector plugins (Telegram, MCP-Ask, etc.). */
   reconnectConnectors: () => Promise<ReconnectResult>
 }

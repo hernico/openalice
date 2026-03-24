@@ -34,8 +34,49 @@ const sourceDesc = (required: boolean, extra?: string) => {
   return base + req + (extra ? ` ${extra}` : '')
 }
 
+function sanitizeForAi(value: unknown): unknown {
+  if (value == null) return value
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value
+  if (typeof value === 'bigint') return value.toString()
+  if (value instanceof Date) return value.toISOString()
+  if (Array.isArray(value)) return value.map((item) => sanitizeForAi(item))
+  if (typeof value === 'function') return undefined
+
+  if (typeof value === 'object') {
+    const decimalish = value as { constructor?: { name?: string }; toString?: () => string }
+    if (decimalish.constructor?.name === 'Decimal' && typeof decimalish.toString === 'function') {
+      return decimalish.toString()
+    }
+
+    const result: Record<string, unknown> = {}
+    for (const [key, nested] of Object.entries(value)) {
+      const sanitized = sanitizeForAi(nested)
+      if (sanitized !== undefined) result[key] = sanitized
+    }
+    return result
+  }
+
+  return String(value)
+}
+
+function wrapTools(tools: Record<string, Tool>): Record<string, Tool> {
+  const wrapped: Record<string, Tool> = {}
+  for (const [name, definition] of Object.entries(tools)) {
+    const execute = (definition as any).execute
+    if (typeof execute !== 'function') {
+      wrapped[name] = definition
+      continue
+    }
+    wrapped[name] = {
+      ...(definition as any),
+      execute: async (...args: any[]) => sanitizeForAi(await execute(...args)),
+    } as Tool
+  }
+  return wrapped
+}
+
 export function createTradingTools(manager: AccountManager): Record<string, Tool> {
-  return {
+  return wrapTools({
     listAccounts: tool({
       description: 'List all registered trading accounts with their id, provider, label, and capabilities.',
       inputSchema: z.object({}),
@@ -131,8 +172,8 @@ If this tool returns an error with transient=true, wait a few seconds and retry 
                 percentageOfEquity: `${percentOfEquity.toFixed(1)}%`,
                 percentageOfPortfolio: `${percentOfPortfolio.toFixed(1)}%`,
               })
-            }
-          }
+  })
+}
           if (allPositions.length === 0) return { positions: [], message: 'No open positions.' }
           return allPositions
         } catch (err) {
@@ -388,5 +429,5 @@ NOTE: This stages the operation. Call tradingCommit + tradingPush to execute.`,
         return results.length === 1 ? results[0] : results
       },
     }),
-  }
+  })
 }

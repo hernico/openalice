@@ -1,0 +1,27 @@
+{
+  "enabled": false,
+  "accountId": "alpaca-paper",
+  "symbols": [
+    "SPY",
+    "QQQ",
+    "IWM",
+    "DIA",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META"
+  ],
+  "excludedSymbols": [],
+  "marketDataFeed": "iex",
+  "sampleIntervalMs": 1000,
+  "accountSnapshotIntervalMs": 5000,
+  "marketClockIntervalMs": 60000,
+  "onlyWhenMarketOpen": true,
+  "recordQuotes": true,
+  "recordTrades": true,
+  "recordTradeUpdates": true,
+  "dataDir": "data/alpaca-eval",
+  "timezone": "America/New_York"
+}

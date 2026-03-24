@@ -1,0 +1,11 @@
+[Unit]
+Description=Build OpenAlice monthly archive snapshots
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/bots/openalice-paper-eval
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+ExecStart=/bin/sh /srv/bots/openalice-paper-eval/scripts/archive_recent_months.sh

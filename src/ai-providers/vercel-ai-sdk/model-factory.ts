@@ -47,7 +47,13 @@ export async function createModelFromConfig(override?: ModelOverride): Promise<M
     case 'openai': {
       const { createOpenAI } = await import('@ai-sdk/openai')
       const client = createOpenAI({ apiKey: resolveApiKey('openai'), baseURL: url || undefined })
-      return { model: client(m), key }
+      // OpenRouter is OpenAI-compatible, but tool loops are more reliable via
+      // Chat Completions than the default Responses API for third-party models.
+      const normalizedUrl = (url || '').toLowerCase()
+      const model = normalizedUrl.includes('openrouter.ai')
+        ? client.chat(m)
+        : client(m)
+      return { model, key }
     }
     case 'google': {
       const { createGoogleGenerativeAI } = await import('@ai-sdk/google')

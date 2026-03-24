@@ -1,0 +1,38 @@
+[
+  {
+    "id": "alpaca-paper",
+    "label": "Alpaca Paper Eval",
+    "platformId": "alpaca-platform",
+    "guards": [
+      {
+        "type": "max-position-size",
+        "options": {
+          "maxPercentOfEquity": 10
+        }
+      },
+      {
+        "type": "cooldown",
+        "options": {
+          "minIntervalMs": 21600000
+        }
+      },
+      {
+        "type": "symbol-whitelist",
+        "options": {
+          "symbols": [
+            "SPY",
+            "QQQ",
+            "IWM",
+            "DIA",
+            "AAPL",
+            "MSFT",
+            "NVDA",
+            "AMZN",
+            "GOOGL",
+            "META"
+          ]
+        }
+      }
+    ]
+  }
+]

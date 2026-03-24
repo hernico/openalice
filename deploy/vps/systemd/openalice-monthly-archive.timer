@@ -1,0 +1,12 @@
+[Unit]
+Description=Run OpenAlice monthly archive snapshots hourly
+
+[Timer]
+OnBootSec=10m
+OnCalendar=*-*-* *:20:00 UTC
+AccuracySec=1m
+Persistent=true
+Unit=openalice-monthly-archive.service
+
+[Install]
+WantedBy=timers.target

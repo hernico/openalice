@@ -157,6 +157,8 @@ pnpm build      # production build (backend + UI)
 pnpm test       # run tests
 ```
 
+For VPS deployment with Docker Compose and persistent `data/`, see [DEPLOY_VPS.md](/Users/nick/Documents/Playground/openalice-paper-eval/DEPLOY_VPS.md).
+
 > **Note:** Port 3002 serves the UI only after `pnpm build`. For frontend development, use `pnpm dev:ui` (port 5173) which proxies to the backend and provides hot reload.
 
 ## Configuration

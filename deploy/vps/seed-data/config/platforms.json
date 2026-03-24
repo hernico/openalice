@@ -1,0 +1,8 @@
+[
+  {
+    "id": "alpaca-platform",
+    "label": "Alpaca Paper Trading",
+    "type": "alpaca",
+    "paper": true
+  }
+]

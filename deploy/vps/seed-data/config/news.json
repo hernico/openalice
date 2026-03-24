@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "intervalMinutes": 30,
+  "maxInMemory": 2000,
+  "retentionDays": 14,
+  "feeds": [
+    {
+      "name": "CNBC Finance",
+      "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664",
+      "source": "cnbc"
+    },
+    {
+      "name": "Federal Reserve Press",
+      "url": "https://www.federalreserve.gov/feeds/press_monetary.xml",
+      "source": "fed"
+    }
+  ]
+}

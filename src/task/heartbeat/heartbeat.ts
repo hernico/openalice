@@ -21,6 +21,8 @@ import { SessionStore } from '../../core/session.js'
 import type { ConnectorCenter } from '../../core/connector-center.js'
 import { writeConfigSection } from '../../core/config.js'
 import type { CronEngine, CronFirePayload } from '../cron/engine.js'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
 // ==================== Constants ====================
 
@@ -94,6 +96,26 @@ export interface Heartbeat {
   isEnabled(): boolean
 }
 
+const FILE_PROMPT_RE = /^Read\s+(.+?)\s+\(or\s+(.+?)\s+if not found\)\s+and follow the instructions inside\.?$/i
+
+export async function resolveHeartbeatPrompt(prompt: string): Promise<string> {
+  const trimmed = prompt.trim()
+  const match = FILE_PROMPT_RE.exec(trimmed)
+  if (!match) return prompt
+
+  const candidates = [match[1], match[2]].map((value) => resolve(value.trim()))
+  for (const filePath of candidates) {
+    try {
+      const content = await readFile(filePath, 'utf-8')
+      if (content.trim()) return content
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  return prompt
+}
+
 // ==================== Factory ====================
 
 export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
@@ -130,7 +152,8 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
       }
 
       // 2. Call AI
-      const result = await agentCenter.askWithSession(payload.payload, session, {
+      const resolvedPrompt = await resolveHeartbeatPrompt(payload.payload)
+      const result = await agentCenter.askWithSession(resolvedPrompt, session, {
         historyPreamble: 'The following is the recent heartbeat conversation history.',
       })
       const durationMs = now() - startMs
