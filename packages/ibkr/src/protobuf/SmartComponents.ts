@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { SmartComponent } from "./SmartComponent";
+import { SmartComponent } from "./SmartComponent.js";
 
 export const protobufPackage = "protobuf";
 

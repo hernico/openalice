@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { IneligibilityReason } from "./IneligibilityReason";
+import { IneligibilityReason } from "./IneligibilityReason.js";
 
 export const protobufPackage = "protobuf";
 

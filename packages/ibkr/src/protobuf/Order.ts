@@ -6,8 +6,8 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { OrderCondition } from "./OrderCondition";
-import { SoftDollarTier } from "./SoftDollarTier";
+import { OrderCondition } from "./OrderCondition.js";
+import { SoftDollarTier } from "./SoftDollarTier.js";
 
 export const protobufPackage = "protobuf";
 

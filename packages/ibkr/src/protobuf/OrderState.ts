@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { OrderAllocation } from "./OrderAllocation";
+import { OrderAllocation } from "./OrderAllocation.js";
 
 export const protobufPackage = "protobuf";
 

@@ -6,11 +6,11 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { ApiConfig } from "./ApiConfig";
-import { LockAndExitConfig } from "./LockAndExitConfig";
-import { MessageConfig } from "./MessageConfig";
-import { OrdersConfig } from "./OrdersConfig";
-import { UpdateConfigWarning } from "./UpdateConfigWarning";
+import { ApiConfig } from "./ApiConfig.js";
+import { LockAndExitConfig } from "./LockAndExitConfig.js";
+import { MessageConfig } from "./MessageConfig.js";
+import { OrdersConfig } from "./OrdersConfig.js";
+import { UpdateConfigWarning } from "./UpdateConfigWarning.js";
 
 export const protobufPackage = "protobuf";
 

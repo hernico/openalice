@@ -2,7 +2,8 @@
   {
     "id": "alpaca-paper",
     "label": "Alpaca Paper Eval",
-    "platformId": "alpaca-platform",
+    "type": "alpaca",
+    "enabled": true,
     "guards": [
       {
         "type": "max-position-size",
@@ -33,6 +34,9 @@
           ]
         }
       }
-    ]
+    ],
+    "brokerConfig": {
+      "paper": true
+    }
   }
 ]

@@ -55,5 +55,14 @@ You are monitoring a one-month Alpaca paper-trading evaluation for U.S. equities
 ```text
 STATUS: HEARTBEAT_OK | CHAT_YES
 REASON: <brief explanation of your decision>
+ACTIONABLE: YES | NO
+SYMBOL: <ticker or NONE>
+BIAS: LONG | SHORT | FLAT | UNKNOWN
+CONFIDENCE: <0-100>
+ACTION: BUY | SELL | WATCH | HOLD | REDUCE | EXIT | NONE
+THESIS: <one short sentence explaining the setup or lack of setup>
+RISK: <one short sentence naming the main risk>
 CONTENT: <message to deliver, only when STATUS is CHAT_YES>
 ```
+
+Always fill every field, even when STATUS is HEARTBEAT_OK. The goal is to leave a learnable evaluation trail for every heartbeat, not just the noisy ones.

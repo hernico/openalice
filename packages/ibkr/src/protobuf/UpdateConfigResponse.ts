@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { UpdateConfigWarning } from "./UpdateConfigWarning";
+import { UpdateConfigWarning } from "./UpdateConfigWarning.js";
 
 export const protobufPackage = "protobuf";
 

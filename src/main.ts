@@ -235,11 +235,12 @@ async function main() {
 
   const alpacaEvalAccount = accountManager.get(config.alpacaEval.accountId) ?? null
   const alpacaEvalAccountConfig = accountConfigById.get(config.alpacaEval.accountId)
+  const alpacaEvalBrokerConfig = (alpacaEvalAccountConfig?.brokerConfig ?? {}) as Record<string, unknown>
   const alpacaEval = new AlpacaEvalCollector({
     config: config.alpacaEval,
     account: alpacaEvalAccount,
-    apiKey: alpacaEvalAccountConfig?.apiKey,
-    apiSecret: alpacaEvalAccountConfig?.apiSecret,
+    apiKey: typeof alpacaEvalBrokerConfig.apiKey === 'string' ? alpacaEvalBrokerConfig.apiKey : undefined,
+    apiSecret: typeof alpacaEvalBrokerConfig.apiSecret === 'string' ? alpacaEvalBrokerConfig.apiSecret : undefined,
     eventLog,
   })
   await alpacaEval.start()

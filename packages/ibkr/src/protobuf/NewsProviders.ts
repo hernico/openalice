@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { NewsProvider } from "./NewsProvider";
+import { NewsProvider } from "./NewsProvider.js";
 
 export const protobufPackage = "protobuf";
 

@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { HistogramDataEntry } from "./HistogramDataEntry";
+import { HistogramDataEntry } from "./HistogramDataEntry.js";
 
 export const protobufPackage = "protobuf";
 

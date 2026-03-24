@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { HistoricalSession } from "./HistoricalSession";
+import { HistoricalSession } from "./HistoricalSession.js";
 
 export const protobufPackage = "protobuf";
 

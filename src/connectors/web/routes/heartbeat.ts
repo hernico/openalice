@@ -2,15 +2,28 @@ import { Hono } from 'hono'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import type { EngineContext } from '../../../core/types.js'
+import { summarizeHeartbeatAssessments } from '../../../task/heartbeat/index.js'
 
 const PROMPT_FILE = 'data/brain/heartbeat.md'
 
-/** Heartbeat routes: GET /status, POST /trigger, PUT /enabled, GET/PUT /prompt-file */
+/** Heartbeat routes: GET /status, GET /summary, GET /assessments, POST /trigger, PUT /enabled, GET/PUT /prompt-file */
 export function createHeartbeatRoutes(ctx: EngineContext) {
   const app = new Hono()
 
   app.get('/status', (c) => {
     return c.json({ enabled: ctx.heartbeat.isEnabled() })
+  })
+
+  app.get('/summary', async (c) => {
+    const entries = await ctx.eventLog.read({ type: 'heartbeat.assessment' })
+    return c.json(summarizeHeartbeatAssessments(entries))
+  })
+
+  app.get('/assessments', async (c) => {
+    const page = Number(c.req.query('page')) || 1
+    const pageSize = Number(c.req.query('pageSize')) || 50
+    const result = await ctx.eventLog.query({ page, pageSize, type: 'heartbeat.assessment' })
+    return c.json(result)
   })
 
   app.post('/trigger', async (c) => {

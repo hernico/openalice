@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sqlite3
 from dataclasses import dataclass
@@ -107,6 +108,42 @@ def stringify_output(value: Any) -> str:
     return json_dumps(value)
 
 
+ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+HEARTBEAT_FENCE_RE = re.compile(r"```[^\n]*\n([\s\S]*?)\n```", re.IGNORECASE)
+HEARTBEAT_STATUS_RE = re.compile(r"^\s*STATUS:", re.IGNORECASE | re.MULTILINE)
+
+
+def strip_terminal_artifacts(value: str) -> str:
+    cleaned = value.replace("\r\n", "\n").replace("\r", "\n")
+    cleaned = ANSI_ESCAPE_RE.sub("", cleaned)
+    cleaned = re.sub(r"[\x00-\x08\x0B-\x1A\x1C-\x1F\x7F]", "", cleaned)
+    return cleaned.strip()
+
+
+def clean_heartbeat_field(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = strip_terminal_artifacts(value)
+    if not cleaned:
+        return None
+    cleaned = re.sub(r"\n?```.*$", "", cleaned, flags=re.DOTALL).strip()
+    return cleaned or None
+
+
+def clean_heartbeat_content(value: Any, status: str) -> str | None:
+    if status != "CHAT_YES":
+        return None
+    if not isinstance(value, str):
+        return None
+    cleaned = strip_terminal_artifacts(value)
+    if not cleaned:
+        return None
+    fenced = HEARTBEAT_FENCE_RE.search(cleaned)
+    if fenced and HEARTBEAT_STATUS_RE.search(fenced.group(1)):
+        cleaned = fenced.group(1).strip()
+    return cleaned or None
+
+
 def read_json_file(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -158,6 +195,12 @@ def to_float(value: Any) -> float | None:
         return None
 
 
+def to_int_bool(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return int(value)
+    return None
+
+
 def create_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
@@ -189,6 +232,35 @@ def create_schema(conn: sqlite3.Connection) -> None:
           reply TEXT,
           duration_ms INTEGER
         );
+
+        CREATE TABLE IF NOT EXISTS heartbeat_assessments (
+          seq INTEGER PRIMARY KEY,
+          ts_ms INTEGER NOT NULL,
+          ts_iso TEXT NOT NULL,
+          source TEXT NOT NULL,
+          status TEXT NOT NULL,
+          outcome TEXT NOT NULL,
+          skip_reason TEXT,
+          reason TEXT,
+          actionable INTEGER NOT NULL,
+          symbol TEXT,
+          bias TEXT NOT NULL,
+          confidence REAL,
+          action TEXT NOT NULL,
+          thesis TEXT,
+          risk TEXT,
+          content TEXT,
+          delivered INTEGER,
+          duration_ms INTEGER NOT NULL,
+          unparsed INTEGER NOT NULL,
+          raw_payload_json TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_heartbeat_assessments_ts
+          ON heartbeat_assessments(ts_ms);
+
+        CREATE INDEX IF NOT EXISTS idx_heartbeat_assessments_symbol
+          ON heartbeat_assessments(symbol, ts_ms);
 
         CREATE TABLE IF NOT EXISTS session_messages (
           uuid TEXT PRIMARY KEY,
@@ -562,6 +634,39 @@ def ingest_events(conn: sqlite3.Connection, source_root: Path, window: MonthWind
                     payload.get("durationMs"),
                 ),
             )
+            if row.get("type") == "heartbeat.assessment":
+                status = payload.get("status") or "SYSTEM_SKIP"
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO heartbeat_assessments(
+                      seq, ts_ms, ts_iso, source, status, outcome, skip_reason, reason, actionable,
+                      symbol, bias, confidence, action, thesis, risk, content, delivered, duration_ms, unparsed, raw_payload_json
+                    )
+                    VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        int(row["seq"]),
+                        int(row["ts"]),
+                        ts.isoformat(),
+                        payload.get("source") or "system",
+                        status,
+                        payload.get("outcome") or "skip",
+                        payload.get("skipReason"),
+                        clean_heartbeat_field(payload.get("reason")),
+                        to_int_bool(payload.get("actionable")) or 0,
+                        payload.get("symbol"),
+                        payload.get("bias") or "UNKNOWN",
+                        to_float(payload.get("confidence")),
+                        payload.get("action") or "NONE",
+                        clean_heartbeat_field(payload.get("thesis")),
+                        clean_heartbeat_field(payload.get("risk")),
+                        clean_heartbeat_content(payload.get("content"), status),
+                        to_int_bool(payload.get("delivered")),
+                        int(payload.get("durationMs") or 0),
+                        to_int_bool(payload.get("unparsed")) or 0,
+                        json_dumps(payload),
+                    ),
+                )
             count += 1
     return count
 
@@ -1165,6 +1270,7 @@ def main() -> None:
                 "alpaca_trade_updates_ingested": alpaca_trade_updates_ingested,
                 "alpaca_account_snapshots_ingested": alpaca_account_snapshots_ingested,
                 "events_rows": fetch_count(conn, "events"),
+                "heartbeat_assessments_rows": fetch_count(conn, "heartbeat_assessments"),
                 "session_messages_rows": fetch_count(conn, "session_messages"),
                 "news_rows": fetch_count(conn, "news_items"),
                 "tool_calls_rows": fetch_count(conn, "tool_calls"),
@@ -1189,6 +1295,7 @@ def main() -> None:
             "raw_root": str(raw_root),
             "counts": {
                 "events": fetch_count(conn, "events"),
+                "heartbeat_assessments": fetch_count(conn, "heartbeat_assessments"),
                 "session_messages": fetch_count(conn, "session_messages"),
                 "news_items": fetch_count(conn, "news_items"),
                 "tool_calls": fetch_count(conn, "tool_calls"),

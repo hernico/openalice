@@ -1,7 +1,7 @@
 import type { EventLogEntry } from './types'
 
-export interface EventQueryResult {
-  entries: EventLogEntry[]
+export interface EventQueryResult<TPayload = unknown> {
+  entries: EventLogEntry<TPayload>[]
   total: number
   page: number
   pageSize: number

@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { Contract } from "./Contract";
+import { Contract } from "./Contract.js";
 
 export const protobufPackage = "protobuf";
 

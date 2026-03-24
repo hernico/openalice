@@ -112,6 +112,13 @@ function isAlpacaAccount(account, alpacaPlatformIds) {
   return alpacaPlatformIds.has(account.platformId) || account.id.startsWith("alpaca")
 }
 
+function ensureBrokerConfig(account) {
+  if (!account.brokerConfig || typeof account.brokerConfig !== "object" || Array.isArray(account.brokerConfig)) {
+    account.brokerConfig = {}
+  }
+  return account.brokerConfig
+}
+
 async function seedDataDirectories() {
   await copyTreeIfMissing(defaultRoot, path.join(dataRoot, "default"))
   await copyTreeIfMissing(seedRoot, dataRoot)
@@ -226,11 +233,23 @@ async function configureTrading() {
     if (!isAlpacaAccount(account, alpacaPlatformIds)) {
       continue
     }
+    account.type = account.type || "alpaca"
+    account.enabled = account.enabled !== false
+    const brokerConfig = ensureBrokerConfig(account)
+    if (typeof account.apiKey === "string" && account.apiKey) {
+      brokerConfig.apiKey = account.apiKey
+      delete account.apiKey
+    }
+    if (typeof account.apiSecret === "string" && account.apiSecret) {
+      brokerConfig.apiSecret = account.apiSecret
+      delete account.apiSecret
+    }
+    brokerConfig.paper = alpacaPaper
     if (alpacaApiKey) {
-      account.apiKey = alpacaApiKey
+      brokerConfig.apiKey = alpacaApiKey
     }
     if (alpacaSecret) {
-      account.apiSecret = alpacaSecret
+      brokerConfig.apiSecret = alpacaSecret
     }
   }
 

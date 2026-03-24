@@ -10,9 +10,10 @@
  *   5. Send — connectorCenter.notify(text)
  *
  * Events written to eventLog:
- *   - heartbeat.done  { reply, durationMs, delivered }
- *   - heartbeat.skip  { reason }
- *   - heartbeat.error { error, durationMs }
+ *   - heartbeat.assessment { structured decision record for every tick }
+ *   - heartbeat.done       { reply, durationMs, delivered }
+ *   - heartbeat.skip       { reason }
+ *   - heartbeat.error      { error, durationMs }
  */
 
 import type { EventLog, EventLogEntry } from '../../core/event-log.js'
@@ -130,6 +131,10 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
 
   const dedup = new HeartbeatDedup()
 
+  async function appendAssessment(assessment: HeartbeatAssessment): Promise<void> {
+    await eventLog.append('heartbeat.assessment', assessment)
+  }
+
   async function handleFire(entry: EventLogEntry): Promise<void> {
     const payload = entry.payload as CronFirePayload
 
@@ -147,6 +152,24 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
       // 1. Active hours guard
       if (!isWithinActiveHours(config.activeHours, now())) {
         console.log('heartbeat: skipped (outside active hours)')
+        await appendAssessment({
+          source: 'system',
+          status: 'SYSTEM_SKIP',
+          outcome: 'skip',
+          skipReason: 'outside-active-hours',
+          reason: 'Heartbeat skipped because the current time is outside the configured active hours window.',
+          actionable: false,
+          symbol: null,
+          bias: 'FLAT',
+          confidence: null,
+          action: 'NONE',
+          thesis: '',
+          risk: '',
+          content: '',
+          delivered: null,
+          durationMs: now() - startMs,
+          unparsed: false,
+        })
         await eventLog.append('heartbeat.skip', { reason: 'outside-active-hours' })
         return
       }
@@ -157,12 +180,36 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
         historyPreamble: 'The following is the recent heartbeat conversation history.',
       })
       const durationMs = now() - startMs
+      const normalizedResultText = preprocessHeartbeatResponse(result.text)
 
       // 3. Parse structured response
       const parsed = parseHeartbeatResponse(result.text)
+      const baseAssessment: Omit<HeartbeatAssessment, 'outcome' | 'skipReason' | 'delivered'> = {
+        source: 'ai',
+        status: parsed.status,
+        reason: parsed.reason,
+        actionable: parsed.actionable,
+        symbol: parsed.symbol,
+        bias: parsed.bias,
+        confidence: parsed.confidence,
+        action: parsed.action,
+        thesis: parsed.thesis,
+        risk: parsed.risk,
+        content: parsed.status === 'CHAT_YES'
+          ? parsed.content || normalizedResultText
+          : '',
+        durationMs,
+        unparsed: parsed.unparsed,
+      }
 
       if (parsed.status === 'HEARTBEAT_OK') {
         console.log(`heartbeat: HEARTBEAT_OK — ${parsed.reason || 'no reason'} (${durationMs}ms)`)
+        await appendAssessment({
+          ...baseAssessment,
+          outcome: 'skip',
+          skipReason: 'ack',
+          delivered: null,
+        })
         await eventLog.append('heartbeat.skip', {
           reason: 'ack',
           parsedReason: parsed.reason,
@@ -174,6 +221,12 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
       const text = parsed.content || result.text
       if (!text.trim()) {
         console.log(`heartbeat: skipped (empty content) (${durationMs}ms)`)
+        await appendAssessment({
+          ...baseAssessment,
+          outcome: 'skip',
+          skipReason: 'empty',
+          delivered: null,
+        })
         await eventLog.append('heartbeat.skip', { reason: 'empty' })
         return
       }
@@ -181,6 +234,12 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
       // 4. Dedup
       if (dedup.isDuplicate(text, now())) {
         console.log(`heartbeat: skipped (duplicate) (${durationMs}ms)`)
+        await appendAssessment({
+          ...baseAssessment,
+          outcome: 'skip',
+          skipReason: 'duplicate',
+          delivered: null,
+        })
         await eventLog.append('heartbeat.skip', { reason: 'duplicate' })
         return
       }
@@ -201,6 +260,12 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
       console.log(`heartbeat: CHAT_YES — delivered=${delivered} (${durationMs}ms)`)
 
       // 6. Done event
+      await appendAssessment({
+        ...baseAssessment,
+        outcome: 'done',
+        skipReason: null,
+        delivered,
+      })
       await eventLog.append('heartbeat.done', {
         reply: text,
         reason: parsed.reason,
@@ -209,6 +274,24 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
       })
     } catch (err) {
       console.error('heartbeat: error:', err)
+      await appendAssessment({
+        source: 'system',
+        status: 'ERROR',
+        outcome: 'error',
+        skipReason: 'error',
+        reason: err instanceof Error ? err.message : String(err),
+        actionable: false,
+        symbol: null,
+        bias: 'UNKNOWN',
+        confidence: null,
+        action: 'NONE',
+        thesis: '',
+        risk: '',
+        content: '',
+        delivered: null,
+        durationMs: now() - startMs,
+        unparsed: false,
+      })
       await eventLog.append('heartbeat.error', {
         error: err instanceof Error ? err.message : String(err),
         durationMs: now() - startMs,
@@ -279,13 +362,67 @@ export function createHeartbeat(opts: HeartbeatOpts): Heartbeat {
 // ==================== Response Parser ====================
 
 export type HeartbeatStatus = 'HEARTBEAT_OK' | 'CHAT_YES'
+export type HeartbeatAssessmentStatus = HeartbeatStatus | 'SYSTEM_SKIP' | 'ERROR'
+export type HeartbeatAssessmentOutcome = 'done' | 'skip' | 'error'
+export type HeartbeatAssessmentSource = 'ai' | 'system'
+export type HeartbeatBias = 'LONG' | 'SHORT' | 'FLAT' | 'UNKNOWN'
+export type HeartbeatAction = 'BUY' | 'SELL' | 'WATCH' | 'HOLD' | 'REDUCE' | 'EXIT' | 'NONE'
 
 export interface ParsedHeartbeatResponse {
   status: HeartbeatStatus
   reason: string
   content: string
+  actionable: boolean
+  symbol: string | null
+  bias: HeartbeatBias
+  confidence: number | null
+  action: HeartbeatAction
+  thesis: string
+  risk: string
   /** True when the raw response couldn't be parsed into the structured format. */
   unparsed: boolean
+}
+
+export interface HeartbeatAssessment {
+  source: HeartbeatAssessmentSource
+  status: HeartbeatAssessmentStatus
+  outcome: HeartbeatAssessmentOutcome
+  skipReason: string | null
+  reason: string
+  actionable: boolean
+  symbol: string | null
+  bias: HeartbeatBias
+  confidence: number | null
+  action: HeartbeatAction
+  thesis: string
+  risk: string
+  content: string
+  delivered: boolean | null
+  durationMs: number
+  unparsed: boolean
+}
+
+export interface HeartbeatAssessmentSummary {
+  totalRuns: number
+  doneCount: number
+  skipCount: number
+  errorCount: number
+  actionableCount: number
+  deliveredCount: number
+  avgConfidence: number | null
+  actionableRate: number
+  deliveredRate: number
+  errorRate: number
+  uniqueSymbols: string[]
+  symbolCounts: Record<string, number>
+  outcomeCounts: Record<HeartbeatAssessmentOutcome, number>
+  actionCounts: Record<HeartbeatAction, number>
+  biasCounts: Record<HeartbeatBias, number>
+  skipReasonCounts: Record<string, number>
+  lastRunAt: string | null
+  lastActionableAt: string | null
+  lastDeliveredAt: string | null
+  lastErrorAt: string | null
 }
 
 /**
@@ -300,29 +437,309 @@ export interface ParsedHeartbeatResponse {
  * raw text as a CHAT_YES message (fail-open: deliver rather than swallow).
  */
 export function parseHeartbeatResponse(raw: string): ParsedHeartbeatResponse {
-  const trimmed = raw.trim()
+  const trimmed = preprocessHeartbeatResponse(raw)
   if (!trimmed) {
-    return { status: 'HEARTBEAT_OK', reason: 'empty response', content: '', unparsed: false }
+    return {
+      status: 'HEARTBEAT_OK',
+      reason: 'empty response',
+      content: '',
+      actionable: false,
+      symbol: null,
+      bias: 'FLAT',
+      confidence: null,
+      action: 'NONE',
+      thesis: '',
+      risk: '',
+      unparsed: false,
+    }
   }
 
   // Extract STATUS field (case-insensitive, allows leading whitespace on the line)
   const statusMatch = /^\s*STATUS:\s*(HEARTBEAT_OK|CHAT_YES)\s*$/im.exec(trimmed)
   if (!statusMatch) {
     // Fail-open: can't parse → treat as a message to deliver
-    return { status: 'CHAT_YES', reason: 'unparsed response', content: trimmed, unparsed: true }
+    return {
+      status: 'CHAT_YES',
+      reason: 'unparsed response',
+      content: trimmed,
+      actionable: true,
+      symbol: null,
+      bias: 'UNKNOWN',
+      confidence: null,
+      action: 'WATCH',
+      thesis: '',
+      risk: '',
+      unparsed: true,
+    }
   }
 
   const status = statusMatch[1].toUpperCase() as HeartbeatStatus
 
-  // Extract REASON field (everything after "REASON:" until next field or end)
-  const reasonMatch = /^\s*REASON:\s*(.+?)(?=\n\s*(?:STATUS|CONTENT):|\s*$)/ims.exec(trimmed)
-  const reason = reasonMatch?.[1]?.trim() ?? ''
+  const reason = extractStructuredField(trimmed, 'REASON')
+  const content = extractStructuredField(trimmed, 'CONTENT')
+  const actionable = parseActionable(extractStructuredField(trimmed, 'ACTIONABLE'), status)
+  const symbol = normalizeSymbolField(extractStructuredField(trimmed, 'SYMBOL'))
+  const bias = normalizeBias(extractStructuredField(trimmed, 'BIAS'), status)
+  const confidence = parseConfidence(extractStructuredField(trimmed, 'CONFIDENCE'))
+  const action = normalizeAction(extractStructuredField(trimmed, 'ACTION'), status)
+  const thesis = extractStructuredField(trimmed, 'THESIS')
+  const risk = extractStructuredField(trimmed, 'RISK')
 
-  // Extract CONTENT field (everything after "CONTENT:" to end)
-  const contentMatch = /^\s*CONTENT:\s*(.+)/ims.exec(trimmed)
-  const content = contentMatch?.[1]?.trim() ?? ''
+  return {
+    status,
+    reason,
+    content,
+    actionable,
+    symbol,
+    bias,
+    confidence,
+    action,
+    thesis,
+    risk,
+    unparsed: false,
+  }
+}
 
-  return { status, reason, content, unparsed: false }
+function extractStructuredField(raw: string, field: string): string {
+  const allFields = [
+    'STATUS',
+    'REASON',
+    'ACTIONABLE',
+    'SYMBOL',
+    'BIAS',
+    'CONFIDENCE',
+    'ACTION',
+    'THESIS',
+    'RISK',
+    'CONTENT',
+  ]
+  const lookahead = allFields.join('|')
+  const match = new RegExp(
+    `(?:^|\\n)\\s*${field}:\\s*([\\s\\S]+?)(?=\\n\\s*(?:${lookahead}):|$)`,
+    'i',
+  ).exec(raw)
+  return sanitizeStructuredField(match?.[1] ?? '')
+}
+
+function preprocessHeartbeatResponse(raw: string): string {
+  const cleaned = stripAnsiAndControl(raw).trim()
+  if (!cleaned) return ''
+
+  const fencedMatch = /```[^\n]*\n([\s\S]*?)\n```/i.exec(cleaned)
+  if (fencedMatch && /^\s*STATUS:/im.test(fencedMatch[1] ?? '')) {
+    return stripAnsiAndControl(fencedMatch[1] ?? '').trim()
+  }
+
+  return cleaned
+}
+
+function sanitizeStructuredField(value: string): string {
+  return stripAnsiAndControl(value).trim()
+}
+
+function stripAnsiAndControl(value: string): string {
+  return value
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\u0000-\u0008\u000B-\u001A\u001C-\u001F\u007F]/g, '')
+}
+
+function parseActionable(value: string, status: HeartbeatStatus): boolean {
+  if (!value) return status === 'CHAT_YES'
+  return /^(yes|y|true|1)$/i.test(value.trim())
+}
+
+function normalizeSymbolField(value: string): string | null {
+  if (!value) return null
+  const normalized = value.trim().toUpperCase()
+  if (!normalized || ['NONE', 'NULL', 'N/A', 'NA'].includes(normalized)) return null
+  return normalized
+}
+
+function normalizeBias(value: string, status: HeartbeatStatus): HeartbeatBias {
+  const normalized = value.trim().toUpperCase()
+  if (normalized === 'LONG' || normalized === 'SHORT' || normalized === 'FLAT' || normalized === 'UNKNOWN') {
+    return normalized
+  }
+  return status === 'HEARTBEAT_OK' ? 'FLAT' : 'UNKNOWN'
+}
+
+function normalizeAction(value: string, status: HeartbeatStatus): HeartbeatAction {
+  const normalized = value.trim().toUpperCase()
+  if (normalized === 'BUY' || normalized === 'SELL' || normalized === 'WATCH' || normalized === 'HOLD'
+    || normalized === 'REDUCE' || normalized === 'EXIT' || normalized === 'NONE') {
+    return normalized
+  }
+  return status === 'HEARTBEAT_OK' ? 'NONE' : 'WATCH'
+}
+
+function parseConfidence(value: string): number | null {
+  if (!value) return null
+  const parsed = Number(value.trim())
+  if (!Number.isFinite(parsed)) return null
+  return Math.max(0, Math.min(100, parsed))
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function asBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null
+}
+
+function asNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+export function normalizeHeartbeatAssessment(payload: unknown): HeartbeatAssessment | null {
+  if (!isRecord(payload)) return null
+
+  const source = payload.source === 'ai' || payload.source === 'system' ? payload.source : null
+  const status = payload.status === 'HEARTBEAT_OK'
+    || payload.status === 'CHAT_YES'
+    || payload.status === 'SYSTEM_SKIP'
+    || payload.status === 'ERROR'
+    ? payload.status
+    : null
+  const outcome = payload.outcome === 'done' || payload.outcome === 'skip' || payload.outcome === 'error'
+    ? payload.outcome
+    : null
+  const bias = payload.bias === 'LONG' || payload.bias === 'SHORT' || payload.bias === 'FLAT' || payload.bias === 'UNKNOWN'
+    ? payload.bias
+    : null
+  const action = payload.action === 'BUY' || payload.action === 'SELL' || payload.action === 'WATCH'
+    || payload.action === 'HOLD' || payload.action === 'REDUCE' || payload.action === 'EXIT' || payload.action === 'NONE'
+    ? payload.action
+    : null
+  const actionable = asBoolean(payload.actionable)
+  const durationMs = asNumber(payload.durationMs)
+  const unparsed = asBoolean(payload.unparsed)
+
+  if (!source || !status || !outcome || !bias || !action || actionable === null || durationMs === null || unparsed === null) {
+    return null
+  }
+
+  return {
+    source,
+    status,
+    outcome,
+    skipReason: asString(payload.skipReason),
+    reason: asString(payload.reason) ?? '',
+    actionable,
+    symbol: normalizeSymbolField(asString(payload.symbol) ?? ''),
+    bias,
+    confidence: asNumber(payload.confidence),
+    action,
+    thesis: asString(payload.thesis) ?? '',
+    risk: asString(payload.risk) ?? '',
+    content: asString(payload.content) ?? '',
+    delivered: asBoolean(payload.delivered),
+    durationMs,
+    unparsed,
+  }
+}
+
+function incrementCount(bucket: Record<string, number>, key: string | null | undefined): void {
+  if (!key) return
+  bucket[key] = (bucket[key] ?? 0) + 1
+}
+
+function ratio(part: number, total: number): number {
+  return total === 0 ? 0 : part / total
+}
+
+export function summarizeHeartbeatAssessments(entries: EventLogEntry[]): HeartbeatAssessmentSummary {
+  const actionCounts: Record<HeartbeatAction, number> = {
+    BUY: 0,
+    SELL: 0,
+    WATCH: 0,
+    HOLD: 0,
+    REDUCE: 0,
+    EXIT: 0,
+    NONE: 0,
+  }
+  const biasCounts: Record<HeartbeatBias, number> = {
+    LONG: 0,
+    SHORT: 0,
+    FLAT: 0,
+    UNKNOWN: 0,
+  }
+  const outcomeCounts: Record<HeartbeatAssessmentOutcome, number> = {
+    done: 0,
+    skip: 0,
+    error: 0,
+  }
+  const skipReasonCounts: Record<string, number> = {}
+  const symbolCounts: Record<string, number> = {}
+
+  let totalRuns = 0
+  let actionableCount = 0
+  let deliveredCount = 0
+  let confidenceTotal = 0
+  let confidenceCount = 0
+  let lastRunAt: string | null = null
+  let lastActionableAt: string | null = null
+  let lastDeliveredAt: string | null = null
+  let lastErrorAt: string | null = null
+
+  for (const entry of entries) {
+    const assessment = normalizeHeartbeatAssessment(entry.payload)
+    if (!assessment) continue
+
+    totalRuns += 1
+    outcomeCounts[assessment.outcome] += 1
+    actionCounts[assessment.action] += 1
+    biasCounts[assessment.bias] += 1
+    incrementCount(skipReasonCounts, assessment.skipReason)
+    incrementCount(symbolCounts, assessment.symbol)
+
+    const tsIso = new Date(entry.ts).toISOString()
+    lastRunAt = tsIso
+
+    if (assessment.actionable) {
+      actionableCount += 1
+      lastActionableAt = tsIso
+    }
+    if (assessment.delivered) {
+      deliveredCount += 1
+      lastDeliveredAt = tsIso
+    }
+    if (assessment.outcome === 'error') {
+      lastErrorAt = tsIso
+    }
+    if (assessment.confidence !== null) {
+      confidenceTotal += assessment.confidence
+      confidenceCount += 1
+    }
+  }
+
+  return {
+    totalRuns,
+    doneCount: outcomeCounts.done,
+    skipCount: outcomeCounts.skip,
+    errorCount: outcomeCounts.error,
+    actionableCount,
+    deliveredCount,
+    avgConfidence: confidenceCount > 0 ? confidenceTotal / confidenceCount : null,
+    actionableRate: ratio(actionableCount, totalRuns),
+    deliveredRate: ratio(deliveredCount, totalRuns),
+    errorRate: ratio(outcomeCounts.error, totalRuns),
+    uniqueSymbols: Object.keys(symbolCounts).sort(),
+    symbolCounts,
+    outcomeCounts,
+    actionCounts,
+    biasCounts,
+    skipReasonCounts,
+    lastRunAt,
+    lastActionableAt,
+    lastDeliveredAt,
+    lastErrorAt,
+  }
 }
 
 // ==================== Active Hours ====================

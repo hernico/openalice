@@ -15,5 +15,14 @@ Read this file at the start of every heartbeat to recall what you should be payi
 ```
 STATUS: HEARTBEAT_OK | CHAT_YES 
 REASON: <why you made this decision>
+ACTIONABLE: YES | NO
+SYMBOL: <ticker/pair or NONE>
+BIAS: LONG | SHORT | FLAT | UNKNOWN
+CONFIDENCE: <0-100>
+ACTION: BUY | SELL | WATCH | HOLD | REDUCE | EXIT | NONE
+THESIS: <one short sentence>
+RISK: <one short sentence>
 CONTENT: <message to deliver, only for CHAT_YES>
 ```
+
+Always fill every field so each heartbeat leaves a structured decision trail, even when you stay quiet.

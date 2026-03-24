@@ -8,6 +8,8 @@ import { createCronEngine, type CronEngine } from '../cron/engine.js'
 import {
   createHeartbeat,
   parseHeartbeatResponse,
+  normalizeHeartbeatAssessment,
+  summarizeHeartbeatAssessments,
   isWithinActiveHours,
   HeartbeatDedup,
   HEARTBEAT_JOB_NAME,
@@ -41,6 +43,13 @@ function makeConfig(overrides: Partial<HeartbeatConfig> = {}): HeartbeatConfig {
 
 const CHAT_YES_RESPONSE = `STATUS: CHAT_YES
 REASON: Significant price movement detected.
+ACTIONABLE: YES
+SYMBOL: BTC
+BIAS: SHORT
+CONFIDENCE: 78
+ACTION: WATCH
+THESIS: Momentum broke down fast and deserves monitoring.
+RISK: Reversal risk is high in extreme volatility.
 CONTENT: Market alert: BTC dropped 5%`
 
 function createMockEngine(response = CHAT_YES_RESPONSE) {
@@ -205,6 +214,16 @@ describe('heartbeat', () => {
         reply: 'Market alert: BTC dropped 5%',
         delivered: true,
       })
+
+      const assessments = eventLog.recent({ type: 'heartbeat.assessment' })
+      expect(assessments).toHaveLength(1)
+      expect(assessments[0].payload).toMatchObject({
+        outcome: 'done',
+        actionable: true,
+        symbol: 'BTC',
+        action: 'WATCH',
+        delivered: true,
+      })
     })
 
     it('should skip HEARTBEAT_OK responses', async () => {
@@ -230,6 +249,12 @@ describe('heartbeat', () => {
 
       // Should NOT have heartbeat.done
       expect(eventLog.recent({ type: 'heartbeat.done' })).toHaveLength(0)
+      expect(eventLog.recent({ type: 'heartbeat.assessment' })[0].payload).toMatchObject({
+        outcome: 'skip',
+        skipReason: 'ack',
+        actionable: false,
+        content: '',
+      })
     })
 
     it('should deliver unparsed responses (fail-open)', async () => {
@@ -260,6 +285,11 @@ describe('heartbeat', () => {
 
       expect(delivered).toHaveLength(1)
       expect(delivered[0]).toBe('BTC just crashed 15%, major liquidation event!')
+      expect(eventLog.recent({ type: 'heartbeat.assessment' })[0].payload).toMatchObject({
+        outcome: 'done',
+        unparsed: true,
+        action: 'WATCH',
+      })
     })
 
     it('should ignore non-heartbeat cron.fire events', async () => {
@@ -312,6 +342,10 @@ describe('heartbeat', () => {
       const skips = eventLog.recent({ type: 'heartbeat.skip' })
       expect(skips[0].payload).toMatchObject({ reason: 'outside-active-hours' })
       expect(mockEngine.askWithSession).not.toHaveBeenCalled()
+      expect(eventLog.recent({ type: 'heartbeat.assessment' })[0].payload).toMatchObject({
+        status: 'SYSTEM_SKIP',
+        skipReason: 'outside-active-hours',
+      })
     })
   })
 
@@ -376,6 +410,10 @@ describe('heartbeat', () => {
 
       const errors = eventLog.recent({ type: 'heartbeat.error' })
       expect(errors[0].payload).toMatchObject({ error: 'AI down' })
+      expect(eventLog.recent({ type: 'heartbeat.assessment' })[0].payload).toMatchObject({
+        status: 'ERROR',
+        outcome: 'error',
+      })
     })
 
     it('should handle delivery failure gracefully', async () => {
@@ -510,6 +548,22 @@ describe('heartbeat', () => {
 // ==================== Unit Tests: parseHeartbeatResponse ====================
 
 describe('parseHeartbeatResponse', () => {
+  it('should unwrap fenced responses and strip terminal artifacts', () => {
+    const r = parseHeartbeatResponse(
+      '```text\nSTATUS: HEARTBEAT_OK\nREASON: Quiet tape.\nACTIONABLE: NO\nSYMBOL: NONE\nBIAS: FLAT\nCONFIDENCE: 0\nACTION: NONE\nTHESIS: No clean setup.\nRISK: Legacy ASTS excluded.\n```\u001b[e~[',
+    )
+    expect(r.status).toBe('HEARTBEAT_OK')
+    expect(r.reason).toBe('Quiet tape.')
+    expect(r.actionable).toBe(false)
+    expect(r.symbol).toBe(null)
+    expect(r.bias).toBe('FLAT')
+    expect(r.confidence).toBe(0)
+    expect(r.action).toBe('NONE')
+    expect(r.thesis).toBe('No clean setup.')
+    expect(r.risk).toBe('Legacy ASTS excluded.')
+    expect(r.unparsed).toBe(false)
+  })
+
   it('should parse HEARTBEAT_OK', () => {
     const r = parseHeartbeatResponse('STATUS: HEARTBEAT_OK\nREASON: All good.')
     expect(r.status).toBe('HEARTBEAT_OK')
@@ -526,10 +580,17 @@ describe('parseHeartbeatResponse', () => {
 
   it('should parse CHAT_YES with content', () => {
     const r = parseHeartbeatResponse(
-      'STATUS: CHAT_YES\nREASON: Price alert.\nCONTENT: BTC dropped 8% to $87,200.',
+      'STATUS: CHAT_YES\nREASON: Price alert.\nACTIONABLE: YES\nSYMBOL: BTC\nBIAS: SHORT\nCONFIDENCE: 81\nACTION: WATCH\nTHESIS: Momentum broke support.\nRISK: Snapback risk.\nCONTENT: BTC dropped 8% to $87,200.',
     )
     expect(r.status).toBe('CHAT_YES')
     expect(r.reason).toBe('Price alert.')
+    expect(r.actionable).toBe(true)
+    expect(r.symbol).toBe('BTC')
+    expect(r.bias).toBe('SHORT')
+    expect(r.confidence).toBe(81)
+    expect(r.action).toBe('WATCH')
+    expect(r.thesis).toBe('Momentum broke support.')
+    expect(r.risk).toBe('Snapback risk.')
     expect(r.content).toBe('BTC dropped 8% to $87,200.')
     expect(r.unparsed).toBe(false)
   })
@@ -557,6 +618,7 @@ describe('parseHeartbeatResponse', () => {
     const r = parseHeartbeatResponse('Something unexpected happened with BTC!')
     expect(r.status).toBe('CHAT_YES')
     expect(r.content).toBe('Something unexpected happened with BTC!')
+    expect(r.action).toBe('WATCH')
     expect(r.unparsed).toBe(true)
   })
 
@@ -577,6 +639,121 @@ describe('parseHeartbeatResponse', () => {
     const r = parseHeartbeatResponse('STATUS: CHAT_YES\nREASON: Want to say hi.')
     expect(r.status).toBe('CHAT_YES')
     expect(r.content).toBe('')
+  })
+})
+
+describe('normalizeHeartbeatAssessment', () => {
+  it('should normalize a structured assessment payload', () => {
+    const normalized = normalizeHeartbeatAssessment({
+      source: 'ai',
+      status: 'CHAT_YES',
+      outcome: 'done',
+      skipReason: null,
+      reason: 'Clear setup.',
+      actionable: true,
+      symbol: 'AAPL',
+      bias: 'LONG',
+      confidence: 74,
+      action: 'BUY',
+      thesis: 'Breakout above prior range.',
+      risk: 'Could fade after open.',
+      content: 'Watch AAPL for a breakout entry.',
+      delivered: true,
+      durationMs: 1200,
+      unparsed: false,
+    })
+
+    expect(normalized).toMatchObject({
+      symbol: 'AAPL',
+      action: 'BUY',
+      delivered: true,
+    })
+  })
+})
+
+describe('summarizeHeartbeatAssessments', () => {
+  it('should summarize actionability, delivery, and errors', () => {
+    const entries: EventLogEntry[] = [
+      {
+        seq: 1,
+        ts: new Date('2026-03-24T13:30:00Z').getTime(),
+        type: 'heartbeat.assessment',
+        payload: {
+          source: 'ai',
+          status: 'CHAT_YES',
+          outcome: 'done',
+          skipReason: null,
+          reason: 'Actionable setup.',
+          actionable: true,
+          symbol: 'MSFT',
+          bias: 'LONG',
+          confidence: 82,
+          action: 'WATCH',
+          thesis: 'Trend continuation.',
+          risk: 'Reversal risk.',
+          content: 'MSFT setting up.',
+          delivered: true,
+          durationMs: 900,
+          unparsed: false,
+        },
+      },
+      {
+        seq: 2,
+        ts: new Date('2026-03-24T13:40:00Z').getTime(),
+        type: 'heartbeat.assessment',
+        payload: {
+          source: 'ai',
+          status: 'HEARTBEAT_OK',
+          outcome: 'skip',
+          skipReason: 'ack',
+          reason: 'No setup.',
+          actionable: false,
+          symbol: null,
+          bias: 'FLAT',
+          confidence: 20,
+          action: 'NONE',
+          thesis: 'Nothing compelling.',
+          risk: 'Chop.',
+          content: '',
+          delivered: null,
+          durationMs: 700,
+          unparsed: false,
+        },
+      },
+      {
+        seq: 3,
+        ts: new Date('2026-03-24T13:50:00Z').getTime(),
+        type: 'heartbeat.assessment',
+        payload: {
+          source: 'system',
+          status: 'ERROR',
+          outcome: 'error',
+          skipReason: 'error',
+          reason: 'AI down',
+          actionable: false,
+          symbol: null,
+          bias: 'UNKNOWN',
+          confidence: null,
+          action: 'NONE',
+          thesis: '',
+          risk: '',
+          content: '',
+          delivered: null,
+          durationMs: 500,
+          unparsed: false,
+        },
+      },
+    ]
+
+    const summary = summarizeHeartbeatAssessments(entries)
+    expect(summary.totalRuns).toBe(3)
+    expect(summary.doneCount).toBe(1)
+    expect(summary.skipCount).toBe(1)
+    expect(summary.errorCount).toBe(1)
+    expect(summary.actionableCount).toBe(1)
+    expect(summary.deliveredCount).toBe(1)
+    expect(summary.uniqueSymbols).toEqual(['MSFT'])
+    expect(summary.skipReasonCounts).toMatchObject({ ack: 1, error: 1 })
   })
 })
 

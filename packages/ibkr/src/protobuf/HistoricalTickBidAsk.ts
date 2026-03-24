@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { TickAttribBidAsk } from "./TickAttribBidAsk";
+import { TickAttribBidAsk } from "./TickAttribBidAsk.js";
 
 export const protobufPackage = "protobuf";
 

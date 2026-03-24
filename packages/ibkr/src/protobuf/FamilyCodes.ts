@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { FamilyCode } from "./FamilyCode";
+import { FamilyCode } from "./FamilyCode.js";
 
 export const protobufPackage = "protobuf";
 

@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { ScannerDataElement } from "./ScannerDataElement";
+import { ScannerDataElement } from "./ScannerDataElement.js";
 
 export const protobufPackage = "protobuf";
 

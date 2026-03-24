@@ -50,6 +50,8 @@ export type {
   ConnectorsConfig,
   NewsCollectorConfig,
   NewsCollectorFeed,
+  HeartbeatAssessment,
+  HeartbeatSummary,
   ToolCallRecord,
   LoginMethod,
 } from './types'

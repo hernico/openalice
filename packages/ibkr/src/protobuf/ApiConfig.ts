@@ -6,8 +6,8 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { ApiPrecautionsConfig } from "./ApiPrecautionsConfig";
-import { ApiSettingsConfig } from "./ApiSettingsConfig";
+import { ApiPrecautionsConfig } from "./ApiPrecautionsConfig.js";
+import { ApiSettingsConfig } from "./ApiSettingsConfig.js";
 
 export const protobufPackage = "protobuf";
 

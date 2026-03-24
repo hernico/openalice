@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { OrderCancel } from "./OrderCancel";
+import { OrderCancel } from "./OrderCancel.js";
 
 export const protobufPackage = "protobuf";
 

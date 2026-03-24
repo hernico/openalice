@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { HistoricalDataBar } from "./HistoricalDataBar";
+import { HistoricalDataBar } from "./HistoricalDataBar.js";
 
 export const protobufPackage = "protobuf";
 

@@ -114,11 +114,58 @@ export interface NewsCollectorConfig {
 
 // ==================== Events ====================
 
-export interface EventLogEntry {
+export interface EventLogEntry<TPayload = unknown> {
   seq: number
   ts: number
   type: string
-  payload: unknown
+  payload: TPayload
+}
+
+export type HeartbeatAssessmentStatus = 'HEARTBEAT_OK' | 'CHAT_YES' | 'SYSTEM_SKIP' | 'ERROR'
+export type HeartbeatAssessmentOutcome = 'done' | 'skip' | 'error'
+export type HeartbeatBias = 'LONG' | 'SHORT' | 'FLAT' | 'UNKNOWN'
+export type HeartbeatAction = 'BUY' | 'SELL' | 'WATCH' | 'HOLD' | 'REDUCE' | 'EXIT' | 'NONE'
+
+export interface HeartbeatAssessment {
+  source: 'ai' | 'system'
+  status: HeartbeatAssessmentStatus
+  outcome: HeartbeatAssessmentOutcome
+  skipReason: string | null
+  reason: string
+  actionable: boolean
+  symbol: string | null
+  bias: HeartbeatBias
+  confidence: number | null
+  action: HeartbeatAction
+  thesis: string
+  risk: string
+  content: string
+  delivered: boolean | null
+  durationMs: number
+  unparsed: boolean
+}
+
+export interface HeartbeatSummary {
+  totalRuns: number
+  doneCount: number
+  skipCount: number
+  errorCount: number
+  actionableCount: number
+  deliveredCount: number
+  avgConfidence: number | null
+  actionableRate: number
+  deliveredRate: number
+  errorRate: number
+  uniqueSymbols: string[]
+  symbolCounts: Record<string, number>
+  outcomeCounts: Record<HeartbeatAssessmentOutcome, number>
+  actionCounts: Record<HeartbeatAction, number>
+  biasCounts: Record<HeartbeatBias, number>
+  skipReasonCounts: Record<string, number>
+  lastRunAt: string | null
+  lastActionableAt: string | null
+  lastDeliveredAt: string | null
+  lastErrorAt: string | null
 }
 
 // ==================== Cron ====================

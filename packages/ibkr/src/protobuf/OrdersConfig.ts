@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { OrdersSmartRoutingConfig } from "./OrdersSmartRoutingConfig";
+import { OrdersSmartRoutingConfig } from "./OrdersSmartRoutingConfig.js";
 
 export const protobufPackage = "protobuf";
 

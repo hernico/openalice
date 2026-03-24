@@ -1,4 +1,6 @@
 import { headers } from './client'
+import type { EventQueryResult } from './events'
+import type { HeartbeatAssessment, HeartbeatSummary } from './types'
 
 export const heartbeatApi = {
   async status(): Promise<{ enabled: boolean }> {
@@ -41,5 +43,21 @@ export const heartbeatApi = {
       body: JSON.stringify({ content }),
     })
     if (!res.ok) throw new Error('Failed to save prompt file')
+  },
+
+  async summary(): Promise<HeartbeatSummary> {
+    const res = await fetch('/api/heartbeat/summary')
+    if (!res.ok) throw new Error('Failed to load heartbeat summary')
+    return res.json()
+  },
+
+  async assessments(opts: { page?: number; pageSize?: number } = {}): Promise<EventQueryResult<HeartbeatAssessment>> {
+    const params = new URLSearchParams()
+    if (opts.page) params.set('page', String(opts.page))
+    if (opts.pageSize) params.set('pageSize', String(opts.pageSize))
+    const qs = params.toString()
+    const res = await fetch(`/api/heartbeat/assessments${qs ? `?${qs}` : ''}`)
+    if (!res.ok) throw new Error('Failed to load heartbeat assessments')
+    return res.json()
   },
 }

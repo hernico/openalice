@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { HistoricalTickLast } from "./HistoricalTickLast";
+import { HistoricalTickLast } from "./HistoricalTickLast.js";
 
 export const protobufPackage = "protobuf";
 

@@ -172,8 +172,8 @@ If this tool returns an error with transient=true, wait a few seconds and retry 
                 percentageOfEquity: `${percentOfEquity.toFixed(1)}%`,
                 percentageOfPortfolio: `${percentOfPortfolio.toFixed(1)}%`,
               })
-  })
-}
+            }
+          }
           if (allPositions.length === 0) return { positions: [], message: 'No open positions.' }
           return allPositions
         } catch (err) {

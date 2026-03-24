@@ -6,7 +6,7 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { MarketDepthData } from "./MarketDepthData";
+import { MarketDepthData } from "./MarketDepthData.js";
 
 export const protobufPackage = "protobuf";
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { api, type AppConfig, type EventLogEntry } from '../api'
+import { api, type AppConfig, type EventLogEntry, type HeartbeatAssessment, type HeartbeatSummary } from '../api'
 import { Toggle } from '../components/Toggle'
 import { SaveIndicator } from '../components/SaveIndicator'
 import { ConfigSection, Section, Field, inputClass } from '../components/form'
@@ -16,10 +16,34 @@ function formatDateTime(ts: number): string {
 }
 
 function eventTypeColor(type: string): string {
+  if (type === 'heartbeat.assessment') return 'text-purple'
   if (type === 'heartbeat.done') return 'text-green'
   if (type === 'heartbeat.skip') return 'text-text-muted'
   if (type === 'heartbeat.error') return 'text-red'
   return 'text-purple'
+}
+
+function formatPercent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`
+}
+
+function formatConfidence(value: number | null): string {
+  if (value == null) return 'n/a'
+  return `${Math.round(value)}`
+}
+
+function outcomeClass(outcome: HeartbeatAssessment['outcome']): string {
+  if (outcome === 'done') return 'text-green'
+  if (outcome === 'error') return 'text-red'
+  return 'text-text-muted'
+}
+
+function compactMapEntries(values: Record<string, number>, limit = 3): string {
+  const entries = Object.entries(values)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+  if (entries.length === 0) return 'n/a'
+  return entries.map(([key, count]) => `${key} (${count})`).join(', ')
 }
 
 // ==================== Status Bar ====================
@@ -262,6 +286,113 @@ function PromptEditor() {
   )
 }
 
+function SummaryCards() {
+  const [summary, setSummary] = useState<HeartbeatSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.heartbeat.summary()
+      .then(setSummary)
+      .catch(console.warn)
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Section title="Evaluation Summary">
+      {loading ? (
+        <div className="bg-bg rounded-lg border border-border px-4 py-6 text-sm text-text-muted">Loading...</div>
+      ) : !summary || summary.totalRuns === 0 ? (
+        <div className="bg-bg rounded-lg border border-border px-4 py-6 text-sm text-text-muted">
+          No heartbeat assessments yet
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-4">
+            <div className="bg-bg rounded-lg border border-border p-4">
+              <div className="text-[11px] uppercase tracking-wide text-text-muted">Total Runs</div>
+              <div className="mt-1 text-2xl font-semibold text-text">{summary.totalRuns}</div>
+            </div>
+            <div className="bg-bg rounded-lg border border-border p-4">
+              <div className="text-[11px] uppercase tracking-wide text-text-muted">Actionable</div>
+              <div className="mt-1 text-2xl font-semibold text-text">{summary.actionableCount}</div>
+              <div className="text-xs text-text-muted">{formatPercent(summary.actionableRate)} of runs</div>
+            </div>
+            <div className="bg-bg rounded-lg border border-border p-4">
+              <div className="text-[11px] uppercase tracking-wide text-text-muted">Delivered</div>
+              <div className="mt-1 text-2xl font-semibold text-text">{summary.deliveredCount}</div>
+              <div className="text-xs text-text-muted">{formatPercent(summary.deliveredRate)} of runs</div>
+            </div>
+            <div className="bg-bg rounded-lg border border-border p-4">
+              <div className="text-[11px] uppercase tracking-wide text-text-muted">Errors</div>
+              <div className="mt-1 text-2xl font-semibold text-text">{summary.errorCount}</div>
+              <div className="text-xs text-text-muted">{formatPercent(summary.errorRate)} of runs</div>
+            </div>
+          </div>
+
+          <div className="bg-bg rounded-lg border border-border p-4 text-sm text-text-muted space-y-2">
+            <div>Average confidence: <span className="text-text">{formatConfidence(summary.avgConfidence)}</span></div>
+            <div>Top actions: <span className="text-text">{compactMapEntries(summary.actionCounts)}</span></div>
+            <div>Top skip reasons: <span className="text-text">{compactMapEntries(summary.skipReasonCounts)}</span></div>
+            <div>Tracked symbols: <span className="text-text">{compactMapEntries(summary.symbolCounts)}</span></div>
+          </div>
+        </div>
+      )}
+    </Section>
+  )
+}
+
+function RecentAssessments() {
+  const [entries, setEntries] = useState<EventLogEntry<HeartbeatAssessment>[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.heartbeat.assessments({ pageSize: 20 })
+      .then(({ entries }) => setEntries(entries))
+      .catch(console.warn)
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <Section title="Recent Assessments">
+      <div className="bg-bg rounded-lg border border-border overflow-x-auto font-mono text-xs">
+        {loading ? (
+          <div className="px-4 py-6 text-center text-text-muted">Loading...</div>
+        ) : entries.length === 0 ? (
+          <div className="px-4 py-6 text-center text-text-muted">No heartbeat assessments yet</div>
+        ) : (
+          <table className="w-full">
+            <thead className="bg-bg-secondary">
+              <tr className="text-text-muted text-left">
+                <th className="px-3 py-2 w-36">Time</th>
+                <th className="px-3 py-2 w-20">Outcome</th>
+                <th className="px-3 py-2 w-20">Symbol</th>
+                <th className="px-3 py-2 w-24">Action</th>
+                <th className="px-3 py-2 w-24">Confidence</th>
+                <th className="px-3 py-2">Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.seq} className="border-t border-border/50 hover:bg-bg-tertiary/30 transition-colors align-top">
+                  <td className="px-3 py-1.5 text-text-muted whitespace-nowrap">{formatDateTime(entry.ts)}</td>
+                  <td className={`px-3 py-1.5 ${outcomeClass(entry.payload.outcome)}`}>{entry.payload.outcome}</td>
+                  <td className="px-3 py-1.5 text-text">{entry.payload.symbol || 'NONE'}</td>
+                  <td className="px-3 py-1.5 text-text">{entry.payload.action}</td>
+                  <td className="px-3 py-1.5 text-text">{formatConfidence(entry.payload.confidence)}</td>
+                  <td className="px-3 py-1.5 text-text-muted">
+                    <div>{entry.payload.reason || 'No reason provided'}</div>
+                    {entry.payload.thesis && <div className="mt-1 text-[11px]">{entry.payload.thesis}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </Section>
+  )
+}
+
 // ==================== Recent Events ====================
 
 function RecentEvents() {
@@ -339,6 +470,8 @@ export function HeartbeatPage() {
         <div className="max-w-[880px] mx-auto space-y-6">
           <StatusBar />
           {config && <HeartbeatConfigForm config={config} />}
+          <SummaryCards />
+          <RecentAssessments />
           <PromptEditor />
           <RecentEvents />
         </div>

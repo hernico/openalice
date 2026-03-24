@@ -6,8 +6,8 @@
 
 /* eslint-disable */
 import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
-import { ComboLeg } from "./ComboLeg";
-import { DeltaNeutralContract } from "./DeltaNeutralContract";
+import { ComboLeg } from "./ComboLeg.js";
+import { DeltaNeutralContract } from "./DeltaNeutralContract.js";
 
 export const protobufPackage = "protobuf";
 
