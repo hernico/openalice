@@ -1,28 +1,20 @@
 # CHANGELOG
 
-## [2026-03-24]
+## [2026-03-25]
 
 ### Changes
-- Created `AGENTS.md` in the project root with local-only safety, workflow, and VPS protection rules
-- Added the mandatory documentation rule so every task/conversation updates `README.md`, `AGENTS.md`, and `CHANGELOG.md` when applicable
-- Inspected the local runtime setup, stack, entrypoint, environment files, and build flow before making runtime changes
-- Attempted the first local build with `pnpm@10.29.2` without changing project functionality
+- Added a safe Alpaca paper smoke test script that generates `trade_updates` without fill risk (create + cancel a small limit order)
+- Documented the smoke test usage in `README.md`
+- Ran the smoke test on the VPS container and confirmed `alpaca-eval` captured trade updates to JSONL
 
 ### Files Modified
-- `AGENTS.md`
+- `README.md`
 - `CHANGELOG.md`
+- `scripts/alpaca_trade_updates_smoke_test.mjs`
 
 ### Commands Used
-- `ls`
-- `cat package.json`
-- `sed -n '1,220p' README.md`
-- `sed -n '1,240p' Dockerfile`
-- `sed -n '1,260p' docker-compose.vps.yml`
-- `sed -n '1,220p' src/main.ts`
-- `ls ui`
-- `rg --files -g '.env*'`
-- `node -v && pnpm -v`
-- `corepack --version`
-- `cat .env.example`
-- `cat ui/package.json`
-- `npx pnpm@10.29.2 build`
+- `rsync -az --delete --exclude .git/ --exclude node_modules/ --exclude .env --exclude data/ ... root@104.131.30.195:/srv/bots/openalice-paper-eval/`
+- `ssh root@104.131.30.195 "docker cp ... openalice-paper-eval-openalice-1:/app/scripts/alpaca_trade_updates_smoke_test.mjs"`
+- `ssh root@104.131.30.195 "docker exec -w /app openalice-paper-eval-openalice-1 node scripts/alpaca_trade_updates_smoke_test.mjs"`
+- `ssh root@104.131.30.195 "curl -s http://127.0.0.1:3002/api/alpaca-eval/status"`
+- `ssh root@104.131.30.195 "tail -n 2 /srv/bots/openalice-paper-eval/data/alpaca-eval/trade-updates/2026-03-25.jsonl"`

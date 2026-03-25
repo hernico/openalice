@@ -193,6 +193,17 @@ Persona and heartbeat prompts use a **default + user override** pattern:
 
 On first run, defaults are auto-copied to the user override path. Edit the user files to customize without touching version control.
 
+## Paper Trading Smoke Test (Trade Updates)
+
+If you want to validate the end-to-end trade updates stream (without taking fill risk), run the smoke test script on the same machine where OpenAlice is running with Alpaca enabled:
+
+```bash
+APCA_API_KEY_ID=... APCA_API_SECRET_KEY=... \
+node scripts/alpaca_trade_updates_smoke_test.mjs
+```
+
+This creates a small limit buy order and then cancels it, which should generate Alpaca `trade_updates` events that OpenAlice can capture for evaluation.
+
 ## Project Structure
 
 ```
