@@ -1,0 +1,8 @@
+[Unit]
+Description=Run OpenAlice Alpaca paper smoke test
+After=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/bots/openalice-paper-eval
+ExecStart=/bin/sh /srv/bots/openalice-paper-eval/scripts/run_alpaca_smoke_week.sh

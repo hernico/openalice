@@ -204,6 +204,8 @@ node scripts/alpaca_trade_updates_smoke_test.mjs
 
 This creates a small limit buy order and then cancels it, which should generate Alpaca `trade_updates` events that OpenAlice can capture for evaluation.
 
+For VPS validation, there is also a one-week systemd wrapper that can run the smoke test once per weekday during market hours. The current default window is `2026-03-26` through `2026-04-01`, and executions are logged under `data/archive/smoke-tests/alpaca-smoke-week.log`.
+
 ## Project Structure
 
 ```

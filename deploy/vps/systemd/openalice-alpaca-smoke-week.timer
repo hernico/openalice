@@ -1,0 +1,12 @@
+[Unit]
+Description=Run OpenAlice Alpaca paper smoke test daily during validation week
+
+[Timer]
+OnBootSec=10m
+OnCalendar=*-*-* 15:15:00 UTC
+AccuracySec=1m
+Persistent=true
+Unit=openalice-alpaca-smoke-week.service
+
+[Install]
+WantedBy=timers.target
