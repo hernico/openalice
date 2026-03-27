@@ -10,6 +10,12 @@
 - Added a one-week VPS timer/service wrapper to run the smoke test once per weekday and log each execution
 - Deployed the timer on the VPS and confirmed the first scheduled-week run was logged under `data/archive/smoke-tests/alpaca-smoke-week.log`
 
+## [2026-03-27]
+
+### Changes
+- Recorded the first automated smoke-test run in the validation week log and noted the `trade_updates` events (`pending_new`, `new`, `canceled`)
+- Documented the timer/service deployment and today's execution details for traceability
+
 ### Files Modified
 - `README.md`
 - `CHANGELOG.md`
